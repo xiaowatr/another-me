@@ -1,0 +1,5 @@
+const text={type:'string',minLength:1,maxLength:2000};
+const sceneProperties=Object.fromEntries([1,2,3].flatMap(i=>['time','title','text'].map(k=>['scene_'+i+'_'+k,{type:'string',minLength:1,maxLength:k==='time'?60:k==='title'?150:2000}])));
+const story={type:'function',function:{name:'submit_story',description:'提交完整的虚构平行人生。所有章节和角色资料必须填写完整。',parameters:{type:'object',properties:{kind:{type:'string',enum:['story']},title:text,synopsis:text,identity:text,intro:text,character:text,opening:text,...sceneProperties},required:['kind','title','synopsis','identity','intro','character','opening',...Object.keys(sceneProperties)],additionalProperties:false}}};
+const clarification={type:'function',function:{name:'ask_clarification',description:'仅在允许追问且有影响方向的关键矛盾时，提出一个简短问题。',parameters:{type:'object',properties:{kind:{type:'string',enum:['clarification']},question:text},required:['kind','question'],additionalProperties:false}}};
+export function storyTools(messages){let canClarify=false;try{canClarify=JSON.parse(messages.at(-1).content).canClarify===true;}catch{}return canClarify?[story,clarification]:[story];}

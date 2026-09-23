@@ -1,0 +1,1 @@
+export function backupBeforeMigration(storage,key){const raw=storage.getItem(key);if(!raw)return true;let data;try{data=JSON.parse(raw);}catch{return false;}if(data.version===2)return true;const backupKey=key+'.before-v8';if(!storage.getItem(backupKey)){storage.setItem(backupKey,raw);if(storage.getItem(backupKey)!==raw)return false;}return true;}

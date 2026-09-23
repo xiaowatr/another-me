@@ -1,0 +1,105 @@
+import {readableText,readableResult} from './readable-text.js';
+import {reviewStory,inspectFactText} from '../src/fact-frame.js';
+import {qualifyCurrentAge,historyRisk} from '../src/session-context.js';
+import {migrateBackground} from '../src/background.js';
+﻿import { checkStoryGrounding, checkChatGrounding } from './grounding.js';
+import { selectEra } from './era.js';
+import { coordinates } from '../src/context.js';
+import { randomUUID } from 'node:crypto';
+import { AppError, validateBackground, parseResult } from './core.js';
+import { storyMessages, chatMessages, streamingChatMessages, PROMPT_VERSION } from './prompts.js';
+import { demoStory, demoProvider } from '../src/services/demo.js';
+export function createExperience(config, caller, recordLocal = () => {}) {
+  const sessions = new Map();
+  let working = false;
+  async function exclusive(task, fn) {
+    const started = Date.now(); let upstreamRecorded = false; let success = false; let category = null; let acquired = false;
+    try {
+      if (working) throw new AppError('busy', 409);
+      working = true; acquired = true;
+      const result = await fn(); upstreamRecorded = Boolean(result.requestId); success = true; return result;
+    } catch (e) { upstreamRecorded = Boolean(e.requestId); category = e.category || 'upstream'; throw e; }
+    finally {
+      if (acquired) working = false;
+      if (!upstreamRecorded) recordLocal({requestId: randomUUID(),time:new Date().toISOString(),task,model:config.model,promptVersion:PROMPT_VERSION,durationMs:Date.now()-started,success,errorCategory:category,inputTokens:null,outputTokens:null,totalTokens:null,sent:false,mode:config.mode});
+    }
+  }
+  function session(id) { const s = sessions.get(id); if (!s || Date.now() - s.updated > 2 * 60 * 60 * 1000) { sessions.delete(id); throw new AppError('session', 410); } return s; }
+  return {
+    restore(input){
+      if(working)throw new AppError('busy',409);
+      const data=input.snapshot;
+      if(!data || !Array.isArray(data.history) || data.history.length>12 || !Array.isArray(data.memories) || data.memories.length>30)throw new AppError('input');
+      const background=validateBackground(migrateBackground(data.background)),story=parseResult(JSON.stringify(data.story),'story');
+      if(story.kind!=='story')throw new AppError('input');
+      const history=data.history.map(m=>{if(!['user','assistant'].includes(m.role)||typeof m.content!=='string'||m.content.length>6000)throw new AppError('input');return {role:m.role,content:m.content};});
+      const memories=data.memories.map(m=>{if(!['reality','preference','fiction'].includes(m.type)||typeof m.text!=='string'||!m.text.trim()||m.text.length>1000)throw new AppError('input');return {id:String(m.id).slice(0,80),type:m.type,text:m.text,sourceYear:Number.isInteger(m.sourceYear)?m.sourceYear:null};});
+      const id=randomUUID();if(input.previousSessionId)sessions.delete(input.previousSessionId);
+      if(sessions.size>=20)sessions.delete(sessions.keys().next().value);
+      const roleRecords=Array.isArray(data.roleRecords)?data.roleRecords.filter(r=>['statement','plan','uncertain'].includes(r.kind)&&typeof r.text==='string'&&r.text.length<=600&&!historyRisk(r.text,background,memories)).slice(-300).map(r=>({sourceId:String(r.sourceId||'').slice(0,120),kind:r.kind,text:r.text})):[];
+      sessions.set(id,{background,story,history,memories,roleRecords,corrections:[],updated:Date.now()});
+      return {sessionId:id,mode:config.mode};
+    },
+    seen(input) {
+      const s=session(input.sessionId),p=s.pending;
+      if(!p || p.id!==input.turnId || typeof input.text!=='string' || !p.text.startsWith(input.text) || input.text.length<p.seen.length)throw new AppError('input');
+      p.seen=input.text;
+      // Replace this turn's history from its original snapshot, never append unseen text.
+      s.history=[...p.history,{role:'user',content:p.message},...(p.seen.trim()?[{role:'assistant',content:p.seen}]:[])].slice(-12);s.updated=Date.now();
+      if(input.stop)p.controller.abort();
+      return {ok:true};
+    },
+    chatStream: (input,emit,signal) => exclusive('chat',async()=>{
+      const s=session(input.sessionId),message=input.message?.trim(),intent=input.intent || 'chat';
+      if(!message || message.length>2000 || !['chat','reality','fiction'].includes(intent))throw new AppError('input');
+      if(s.corrections.length>=20)throw new AppError('memory_full');
+      const controller=new AbortController();
+      const p={id:randomUUID(),text:'',seen:'',message,history:[...s.history],controller};s.pending=p;
+      // Unconfirmed chat corrections remain in recent conversation; only UI-confirmed memories are pinned.
+      emit({type:'start',turnId:p.id,corrections:s.corrections});
+      let buffered='';
+      const forward=text=>{text=qualifyCurrentAge(readableText(text),s.background);const risks=inspectFactText(text,s.background,{memories:s.memories});if(risks.length)throw new AppError('background_conflict',422,{stage:'business',reason:risks[0]});checkChatGrounding(text,s.background,s.memories || []);p.text+=text;emit({type:'text',text});};
+      const onText=text=>{buffered+=text;let match;while((match=/[。！？!?\n]/.exec(buffered))){const end=match.index+1;const sentence=buffered.slice(0,end);buffered=buffered.slice(end);forward(sentence);}};
+      const response=config.mode==='demo'?{result:{reply:await demoProvider.reply({turn:s.history.length/2})}}:await caller.call('chat',streamingChatMessages(s,message,intent),{onText,validateResult:()=>{if(buffered){forward(buffered);buffered='';}},onStart:requestId=>emit({type:'request',requestId}),signal:AbortSignal.any([signal,controller.signal])});
+      if(config.mode==='demo')onText(response.result.reply);
+      if(buffered)forward(buffered);
+      emit({type:'done',requestId:response.requestId});
+      return {requestId:response.requestId};
+    }),
+    status() { return { mode: config.mode, site: config.site, model: config.model,  }; },
+    story: (input) => exclusive('story', async () => {
+      const background = validateBackground(migrateBackground(input.background));
+      if (typeof (input.clarification ?? '') !== 'string' || (input.clarification || '').length > 2000) throw new AppError('input');
+      const response = config.mode === 'demo' ? { result: { ...demoStory, kind: 'story', character: demoStory.intro, opening: '【固定演示开场】刚刚关了书店，你想聊些什么？' } } : await caller.call('story', storyMessages(background, input.clarification || '', !input.clarificationSkipped),{validateResult:result=>{if(result.kind==='clarification' && (background.followupKey || input.clarificationSkipped || input.clarification))throw new AppError('invalid_response',502,{stage:'business',reason:'repeated_clarification'});if(result.kind==='story'){checkStoryGrounding(result,background);const review=reviewStory(result,background,[],{strictTime:true});if(review.issues.length)throw new AppError('background_conflict',422,{stage:'business',reason:review.issues[0].reasons[0],field:review.issues[0].field});}}});
+      response.result=readableResult(response.result);
+      if (response.result.kind === 'clarification') return { ...response.result, mode: config.mode, requestId: response.requestId };
+      const id = randomUUID();
+      // 成功重生成才替换旧会话，失败仍保留原故事。设置独立角色和空历史。
+      if (input.previousSessionId) sessions.delete(input.previousSessionId);
+      for (const [key, value] of sessions) if (Date.now() - value.updated > 7200000) sessions.delete(key);
+      if (sessions.size >= 20) sessions.delete(sessions.keys().next().value);
+      const confirmed = { ...background, details: background.details + (input.clarification ? '\n补充澄清：' + input.clarification : '') };
+      sessions.set(id, { background: confirmed, story: response.result, corrections: [], memories: [], history: [], updated: Date.now() });
+      return { eraContext:selectEra(background,coordinates(background)), story: response.result, sessionId: id, mode: config.mode, requestId: response.requestId };
+    }),
+    chat: (input) => exclusive('chat', async () => {
+      const s = session(input.sessionId);
+      const message = input.message;
+      const intent = input.intent || 'chat';
+      if (typeof message !== 'string' || !message.trim() || message.length > 2000 || !['chat','reality','fiction'].includes(intent)) throw new AppError('input');
+      if (s.corrections.length >= 20) throw new AppError('memory_full');
+      const pending = intent === 'chat' ? [] : [{ type: intent, text: message.trim() }];
+      const response = config.mode === 'demo' ? { result: { reply: await demoProvider.reply({ turn: s.history.length / 2 }), updateType: intent === 'chat' ? 'none' : intent } } : await caller.call('chat', chatMessages({ ...s, corrections: [...s.corrections, ...pending] }, message.trim(), intent));
+      response.result.reply=qualifyCurrentAge(readableText(response.result.reply),s.background);
+      const risks=inspectFactText(response.result.reply,s.background,{memories:s.memories});
+      if(risks.length)throw new AppError('background_conflict',422,{stage:'business',reason:risks[0]});
+      const type = intent === 'chat' ? response.result.updateType : intent;
+      if (type !== 'none') s.corrections.push({ type, text: message.trim() });
+      s.history.push({ role: 'user', content: message.trim() }, { role: 'assistant', content: response.result.reply });
+      s.history = s.history.slice(-12); s.updated = Date.now();
+      return { reply: response.result.reply, corrections: s.corrections, mode: config.mode, requestId: response.requestId };
+    }),
+  };
+}
+
+

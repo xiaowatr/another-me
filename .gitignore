@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+*.log
+.local/
+
+# Local historical feedback and personal regression cases stay on this computer.
+docs/*
+!docs/deployment.md
+tests/*
+!tests/production.test.js
+*.jsonl
