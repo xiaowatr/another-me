@@ -72,6 +72,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       if (typeof (input.clarification ?? '') !== 'string' || (input.clarification || '').length > 2000) throw new AppError('input');
       const response = config.mode === 'demo' ? { result: { ...demoStory, kind: 'story', character: demoStory.intro, opening: '【固定演示开场】刚刚关了书店，你想聊些什么？' } } : await caller.call('story', storyMessages(background, input.clarification || '', !input.clarificationSkipped),{validateResult:result=>{if(result.kind==='clarification' && (background.followupKey || input.clarificationSkipped || input.clarification))throw new AppError('invalid_response',502,{stage:'business',reason:'repeated_clarification'});if(result.kind==='story'){checkStoryGrounding(result,background);const review=reviewStory(result,background,[],{strictTime:true});if(review.issues.length)throw new AppError('background_conflict',422,{stage:'business',reason:review.issues[0].reasons[0],field:review.issues[0].field});}}});
       response.result=readableResult(response.result);
+      if(response.result.kind==='story')response.result.openingVersion=2;
       if (response.result.kind === 'clarification') return { ...response.result, mode: config.mode, requestId: response.requestId };
       const id = randomUUID();
       // 成功重生成才替换旧会话，失败仍保留原故事。设置独立角色和空历史。

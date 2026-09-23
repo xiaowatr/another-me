@@ -65,6 +65,7 @@ export function parseResult(content, task, diagnostic = {}) {
 export function validateBackground(b) {
   if(b && 'realityOutcome' in b){
     if(!['realityOutcome','hypotheticalDirection'].every(k=>str(b[k],k==='forkTime'?80:1500)) || typeof b.details!=='string' || b.details.length>1500) throw new AppError('input');
+    if(b.choiceReason && (typeof b.choiceReason!=='string'||b.choiceReason.length>1500))throw new AppError('input');
     if(b.gender && !['女','男','非二元','不透露'].includes(b.gender))throw new AppError('input');
     if(b.mbti && b.mbti!=='unknown' && !MBTI_TYPES.includes(b.mbti))throw new AppError('input');
     if(coordinateError(b))throw new AppError('input');

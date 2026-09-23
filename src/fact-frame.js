@@ -65,6 +65,7 @@ export function reviewStory(story,background,memories=[],{strictTime=false}={}){
  return {issues,trusted,openingSafe:!openingIssues.length};
 }
 export function currentOpening(story,background){
+ if(story.openingVersion===2 && story.opening?.trim() && !inspectFactText(story.opening,background).length)return story.opening;
  const year=coordinates(background).forkYear;
  // A clearly current and consistent opening can be reused verbatim. Old openings stay in the story view.
  if(/现在|如今|此刻/.test(story.opening||'')&&!inspectFactText(story.opening,background).length&&!/今年暑假|今年夏天/.test(story.opening))return story.opening;

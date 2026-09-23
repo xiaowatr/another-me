@@ -11,7 +11,7 @@ export function summarizeMemory(value){
  [/^请(?:你)?(不要|别|先)(.+)$/,'preference',m=>'交流偏好：'+m[1]+m[2]],
  [/^我(?:现在|目前)?住在(.+)$/,'reality',m=>'居住地：'+m[1]],
  [/^我来自(.+)$/,'reality',m=>'来自：'+m[1]],
- [/^我(?:目前|现在|正在)?在学(.+)$/,'reality',m=>'正在学习：'+m[1]],
+ [/^我(?:(?:最近|近期|刚刚|刚)?开始学(?:习)?|(?:目前|现在|正在)?在学|最近在学)(.+)$/,'reality',m=>'正在学习：'+m[1]],
  [/^我(?:学过)(.+)$/,'reality',m=>'学习经历：'+m[1]],
  [/^我(?:曾经)?做过(.+)$/,'reality',m=>'做过的事：'+m[1]],
  [/^我(?:正在|打算|计划|希望|想要|决定)(.+)$/,'preference',m=>'当前方向：'+m[1]],
@@ -29,7 +29,8 @@ export function proposeMemories(life){
  const meta={...emptyReview(),...life.sessionMeta},end=life.messages.length,start=Math.min(meta.organizedUntil,end),candidates=[];
  const known=[...(life.memories||[]),...(life.candidates||[]),...(meta.suppressed||[])];
  for(let i=start;i<end;i++){const m=life.messages[i];if(m.role!=='user'||m.status==='pending'||m.status==='failed')continue;
- const clauses=(m.text||'').split(/(?<=[。！？；\n])/).map(s=>s.trim()).filter(Boolean);
+ if(m.kind==='closing')continue;
+ const clauses=memoryClauses(m.text);
  for(let j=0;j<clauses.length;j++){const original=clauses[j],summary=summarizeMemory(original);if(!summary)continue;const text=summary.text;if(text.length<6||text.length>300||/[?？]|我在想|我觉得|我好像|我似乎|我在生气|我在难过|如果|假如|要是|可能|也许|假设|希望他|他说|她说|今天.*(?:难过|开心|烦|累)|现在.*(?:难过|生气|烦|累)/.test(text))continue;
  if(!summary)continue;
  const sourceId=m.id||`${life.id}:legacy:${i}`;
@@ -53,4 +54,16 @@ export function reviseMemories(life,next){const changed=(life.memories||[]).filt
 export function completeReview(life,ids=life.candidates.filter(c=>c.sourceRole!=='assistant'&&['reality','preference'].includes(c.type)).map(c=>c.id)){
  let next=[...life.memories];for(const c of life.candidates.filter(c=>ids.includes(c.id)&&c.sourceRole!=='assistant'&&['reality','preference'].includes(c.type)&&c.text.trim())){if(!next.some(m=>m.id!==c.id&&m.id!==c.replacesId&&sameMemory(m.text,c.text))){next=next.filter(m=>m.id!==c.replacesId&&m.id!==c.id);next.push({...c,text:c.text.trim(),savedAt:new Date().toISOString()});}}
  if(next.length>30)throw Error('memory_capacity');return dismissCandidates(reviseMemories(life,next),life.candidates.filter(c=>!ids.includes(c.id)));
+}
+
+export function memoryClauses(value){
+ return String(value||'').split(/(?<=[。！？；\n])/).flatMap(sentence=>{
+ if(/^(?:更正|其实|之前说错)|[?？]|(?:但是|不过|然而|不再)/.test(sentence))return [sentence.trim()];
+ const parts=sentence.split(/[，,]/);const own=/^我/.test(parts[0].trim());
+ return parts.map((part,i)=>{let p=part.trim();if(i&&own&&/^(?:周末|平时|通常|每天|每周|一直)?(?:喜欢|不喜欢|习惯|打算|计划)/.test(p))p='我'+p;return p.replace(/^我(?:周末|每天|每周)(喜欢|不喜欢)/,'我平时$1');}).filter(Boolean);
+ });
+}
+export function closeConversation(life,now=new Date().toISOString()){
+ if(life.messages.at(-1)?.kind==='closing')return life;
+ return {...life,messages:[...life.messages,{id:'closing:'+life.id+':'+life.messages.length,role:'user',kind:'closing',status:'sent',text:'先聊到这里吧',createdAt:now}]};
 }

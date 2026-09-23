@@ -7,7 +7,7 @@ const rules=[
 ];
 export function optionalFollowup(b){
  try{if(b.followupKey || b.followupAnswer || b.followupSkipped || !b.realityOutcome?.trim() || !b.hypotheticalDirection?.trim())return null;
- const text=[b.realityOutcome,b.details,b.feelings,b.why,b.reason].filter(Boolean).join(' ');
+ const text=[b.realityOutcome,b.choiceReason,b.details,b.feelings,b.why,b.reason].filter(Boolean).join(' ');
  const rule=rules.find(r=>r.match.test(text)&&!r.known.test(text));return rule?{id:rule.id,question:rule.question,options:[...new Set([...rule.options,'说不清'])]}:null;
  }catch{return null;}
 }
@@ -24,6 +24,7 @@ export function timelineInput(b){
  }};
  add(b.realityOutcome ?? b.choice,true);add(b.details,false);
  if(!b.followupSkipped && b.followupAnswer && b.followupAnswer!=='说不清' && (b.followupKey==='model' || savedFollowup(b)))result.atFork.feelings.push({question:b.followupQuestion || '',answer:b.followupAnswer});
+ if(b.choiceReason?.trim())result.atFork.eventAndMotivation.push(b.choiceReason.trim());
  return result;
 }
 export function archiveName(life){

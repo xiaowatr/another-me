@@ -63,3 +63,9 @@ cd "C:\Users\小水\Desktop\职场小水\another me"
 & .\.local\publish-render.ps1
 ```
 脚本使用已安装的完整Git；若没有提交署名，会询问姓名和邮箱（可用GitHub隐私邮箱），无需管理员权限。如果执行策略阻止脚本，打开.local/publish-render.ps1，在普通终端逐行执行即可，不修改执行策略。Git Credential Manager出现时选浏览器登录，使用具有本仓库写权限的GitHub账户。不要在聊天中提供密码或Token。脚本只提交明确允许的发布路径，并检查没有额外暂存文件，普通push，不强推。
+
+## v14 更新发布
+用户已确认现有Render服务可生成故事和聊天。本轮新增选择原因、修复自动记忆复句提取／开场显示／输入布局及结束导航，未改变存储键，不清空数据。新通用回归tests/iteration14.test.js不含私人资料。构建和本地回归后，将本轮修改文件（server、src、.gitignore、此说明、tests/iteration14.test.js）提交推送到现有服务绑定分支。不要使用git add .，保留其他未跟踪目录。Render若启用自动部署会部署新提交；否则Manual Deploy → Deploy latest commit。仍用原Build/Start及环境变量，无需重填密钥；保持原域名才能读取同一浏览器存档。
+故事、聊天、草稿、记忆及候选按人生ID存在当前域名localStorage（another-me.lives.v1；填写草稿another-me.background-draft.v1）。本地备份同样在浏览器；服务端只有临时会话缓存及无聊天正文的用量诊断，不是云存档，不跨浏览器同步。
+
+本轮最终111项本地回归及生产构建通过。0真实模型调用；新开场和性格规则仅完成链路/单测，模型质量及真机键盘仍待实测。
