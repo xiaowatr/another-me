@@ -1,3 +1,4 @@
+import {hardConflicts,applyClarification,temporalIssues} from '../src/input-anchors.js';
 import {reviewMessages,validateReview} from './setting-review.js';
 import {compileSetting,settingIssues} from '../src/effective-setting.js';
 import {recallTarget,inputConflicts} from '../src/consistency.js';
@@ -70,14 +71,15 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       emit({type:'done',requestId:response.requestId});
       return {requestId:response.requestId};
     }),
-    status() { return { mode: config.mode, site: config.site, model: config.model,  }; },
+    status() { return { version:'2026-09-24.v20-local',promptVersion:PROMPT_VERSION, mode: config.mode, site: config.site, model: config.model,  }; },
     story: (input) => exclusive('story', async () => {
-      let background = validateBackground(migrateBackground(input.background));
+      let background = validateBackground(migrateBackground(applyClarification(input.background)));
       if (typeof (input.clarification ?? '') !== 'string' || (input.clarification || '').length > 2000) throw new AppError('input');
       if(input.clarification)background={...background,followupKey:'model',followupAnswer:input.clarification,followupSkipped:''};
-      const conflicts=inputConflicts(background);if(conflicts.length){if(input.clarificationSkipped)throw new AppError('input_conflict',422);return {kind:'clarification',question:'想确认一下：'+conflicts.join('；')+'？',mode:config.mode};}
-      const effective=compileSetting(background);if(effective.clarifications.length){if(input.clarificationSkipped)throw new AppError('input_conflict',422);return {kind:'clarification',question:effective.clarifications.join('；'),mode:config.mode};}
-      const response = config.mode === 'demo' ? { result: { ...demoStory, kind: 'story', character: demoStory.intro, opening: '【固定演示开场】刚刚关了书店，你想聊些什么？' } } : await caller.call('story', storyMessages(background, input.clarification || '', !input.clarificationSkipped,effective),{validateResult:result=>{if(result.kind==='clarification' && (background.followupKey || input.clarificationSkipped || input.clarification))throw new AppError('invalid_response',502,{stage:'business',reason:'repeated_clarification'});if(result.kind==='story'){const conflicts=settingIssues(result,effective);if(conflicts.length)throw new AppError('background_conflict',422,{stage:'business',reason:conflicts[0].reason,field:conflicts[0].field});checkStoryGrounding(result,background);const review=reviewStory(result,background,[],{strictTime:true});if(review.issues.length)throw new AppError('background_conflict',422,{stage:'business',reason:review.issues[0].reasons[0],field:review.issues[0].field});}}});
+      const hard=hardConflicts(background);if(hard.length)return {kind:'clarification',hard:true,question:hard.map(h=>h.question+'（'+h.sources.join(' / ')+'）').join('；')+' 可修改原输入，或回答“现实：…”“假设：…”',mode:config.mode};
+      const conflicts=inputConflicts(background);if(conflicts.length){return {kind:'clarification',hard:true,question:'想确认一下：'+conflicts.join('；')+'？',mode:config.mode};}
+      const effective=compileSetting(background);effective.originalInput={...input.background};if(effective.clarifications.length){if(input.clarificationSkipped)throw new AppError('input_conflict',422);return {kind:'clarification',question:effective.clarifications.join('；'),mode:config.mode};}
+      const response = config.mode === 'demo' ? { result: { ...demoStory, kind: 'story', character: demoStory.intro, opening: '【固定演示开场】刚刚关了书店，你想聊些什么？' } } : await caller.call('story', storyMessages(background, input.clarification || '', !input.clarificationSkipped,effective),{validateResult:result=>{if(result.kind==='clarification' && (background.followupKey || input.clarificationSkipped || input.clarification))throw new AppError('invalid_response',502,{stage:'business',reason:'repeated_clarification'});if(result.kind==='story'){const conflicts=[...settingIssues(result,effective),...temporalIssues(result,background)];if(conflicts.length)throw new AppError('background_conflict',422,{stage:'business',reason:conflicts[0].reason,field:conflicts[0].field});checkStoryGrounding(result,background);const review=reviewStory(result,background,[],{strictTime:true});if(review.issues.length)throw new AppError('background_conflict',422,{stage:'business',reason:review.issues[0].reasons[0],field:review.issues[0].field});}}});
       if(config.mode==='real'&&config.reviewStories&&response.result.kind==='story'){await caller.call('review',reviewMessages(effective,response.result),{parentRequestId:response.requestId,validateResult:r=>validateReview(r,effective,response.result)});}
       response.result=readableResult(response.result);
       if(response.result.kind==='story')response.result.openingVersion=2;
@@ -89,7 +91,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       if (sessions.size >= 20) sessions.delete(sessions.keys().next().value);
       const confirmed = {...background};
       sessions.set(id, { background: confirmed, story: response.result, corrections: [], memories: [], history: [], updated: Date.now() });
-      return { effectiveSetting:effective, eraContext:selectEra(background,coordinates(background)), story: response.result, sessionId: id, mode: config.mode, requestId: response.requestId };
+      return { background:confirmed,effectiveSetting:effective, eraContext:selectEra(background,coordinates(background)), story: response.result, sessionId: id, mode: config.mode, requestId: response.requestId };
     }),
     chat: (input) => exclusive('chat', async () => {
       const s = session(input.sessionId);

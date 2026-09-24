@@ -1,12 +1,13 @@
 // Conservative summaries of explicit user clauses, without inferring traits.
 export function summarizeMemory(value){
  let text=String(value||'').trim().replace(/^(?:更正|其实|之前说错了?)[，,:：\s]*/,'').replace(/[。！；\s]+$/,'');
+ if(/^(?:最近|近期)?(?:开始学|学摄影|喜欢|不喜欢)/.test(text))text='我'+text.replace(/^最近学/,'最近开始学');
  if(!text||/[?？]|吗$|呢$|如果|假如|要是|可能|也许|假设|他说|她说|角色|另一个自己|我(?:觉得|好像|似乎)|(?:今天|现在).*(?:难过|开心|生气|烦|累)/.test(text))return null;
  if(/[，,].*(?:但是|不过|然而|不再)/.test(text))return null;
  text=text.split(/[，,]/)[0];
  if(/(?:今天|今晚|明天|这会儿|临时)/.test(text))return null;
  const rules=[
- [/^我(?:一直|真的|非常|很|特别|比较|更|平时|通常)*(不喜欢|喜欢|喜爱|爱好)(.+)$/,'preference',m=>(m[1]==='不喜欢'?'不喜欢：':'兴趣偏好：')+m[2]],
+ [/^我(?:一直|真的|非常|很|特别|比较|更|平时|通常|也)*(不喜欢|喜欢|喜爱|爱好)(.+)$/,'preference',m=>(m[1]==='不喜欢'?'不喜欢：':'兴趣偏好：')+m[2]],
  [/^(?:我)?希望你(.+)$/,'preference',m=>'交流偏好：'+m[1]],
  [/^请(?:你)?(不要|别|先)(.+)$/,'preference',m=>'交流偏好：'+m[1]+m[2]],
  [/^我(?:现在|目前)?住在(.+)$/,'reality',m=>'居住地：'+m[1]],
@@ -73,8 +74,8 @@ export function completeReview(life,ids=life.candidates.filter(c=>candidateHasUs
 
 export function memoryClauses(value){
  return String(value||'').split(/(?<=[。！？；\n])/).flatMap(sentence=>{
- if(/^(?:更正|其实|之前说错)|[?？]|(?:但是|不过|然而|不再)/.test(sentence))return [sentence.trim()];
- const parts=sentence.split(/[，,]/);const own=/^我/.test(parts[0].trim());
+ if(/^(?:更正|其实|之前说错)|[?？]|(?:但是|不过|然而|不再|不是)/.test(sentence))return [sentence.trim()];
+ const parts=sentence.split(/[，,]/);const own=/^(?:我|最近|近期|喜欢)/.test(parts[0].trim());
  return parts.map((part,i)=>{let p=part.trim();if(i&&own&&/^(?:周末|平时|通常|每天|每周|一直)?(?:喜欢|不喜欢|习惯|打算|计划)/.test(p))p='我'+p;return p.replace(/^我(周末|每天|每周)(喜欢|不喜欢)(.+)$/,'我$2$1$3');}).filter(Boolean);
  });
 }

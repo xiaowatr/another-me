@@ -1,3 +1,4 @@
+import {scenePhase} from './input-anchors.js';
 import {replacementIssues,durationIssues,placementIssues,relevantAnswer} from './consistency.js';
 ﻿import {coordinates} from './context.js';
 const ended=/(去世|离世|过世|病故|身故|死亡|倒闭|停办|拆除)/;
@@ -47,7 +48,7 @@ export function inspectFactText(text,background,{frame='chat',anchorYear,memorie
  return [...new Set(issues)];
 }
 export function reviewStory(story,background,memories=[],{strictTime=false}={}){
- const issues=[],trusted={intro:'',character:'',scenes:[]};const c=coordinates(background);let lastYear=c.forkYear;
+ const issues=[],trusted={intro:'',character:'',scenes:[],future:[]};const c=coordinates(background);let lastYear=c.forkYear;
  if(strictTime&&c.birthYear!=null){
   for(const clause of String(story.identity||'').split(/[。；，]/)){
    const match=clause.match(/(\d{1,3})岁/);if(!match)continue;
@@ -58,6 +59,7 @@ export function reviewStory(story,background,memories=[],{strictTime=false}={}){
  }
  for(const key of ['intro','character']){const risk=inspectFactText(story[key],background,{frame:'story',anchorYear:yearOf(story[key])??lastYear,memories});if(risk.length)issues.push({field:key,reasons:risk});else trusted[key]=story[key]||'';}
  for(const [i,scene] of (story.scenes||[]).entries()){
+  if(scenePhase(scene,background)==='future'){trusted.future.push({...scene,modality:'possible'});continue;}
   const explicit=yearOf(scene.time);if(explicit)lastYear=explicit;
   else if(!/同年|次年|翌年/.test(scene.time||''))lastYear=null;
   if(/次年|翌年/.test(scene.time||'')&&lastYear!=null)lastYear++;

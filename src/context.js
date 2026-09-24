@@ -1,12 +1,14 @@
+import {dateParts} from './input-anchors.js';
 ﻿export function coordinates(b){
  const birth=/^\d{4}$/.test(b.birthYear || '')?Number(b.birthYear):null;
  const age=/^\d{1,3}$/.test(b.forkAge || '')?Number(b.forkAge):null;
+ const eventYear=dateParts(b.hypotheticalDirection)[0]?.year??dateParts(b.realityOutcome)[0]?.year??null;
  const direct=/^\d{4}$/.test(b.forkYear || '')?Number(b.forkYear):null;
  const calculated=birth!=null && age!=null?birth+age:null;
  const useCalculated=['3','4','5','6'].includes(b.inputVersion) && calculated!=null;
  const free=typeof b.locationText==='string';
  const place=free?b.locationText.trim()||null:b.cityMode==='specific'?(b.city || '').trim()||null:b.cityMode==='type'?(b.cityType || '').trim()||null:null;
- return {birthYear:birth,forkAge:age,forkYear:useCalculated?calculated:direct??calculated,yearSource:useCalculated?'estimated':direct?'user':calculated?'estimated':'unknown',estimatedYear:calculated,
+ return {birthYear:birth,forkAge:age,forkYear:eventYear??(useCalculated?calculated:direct??calculated),yearSource:eventYear?'user':useCalculated?'estimated':direct?'user':calculated?'estimated':'unknown',estimatedYear:calculated,
    locationAtFork:place,
    locationKind:free?(place?'description':'unknown'):b.cityMode==='specific'?'city':b.cityMode==='type'?'environment':'unknown',
    hometown:null,futureWorkplace:null};

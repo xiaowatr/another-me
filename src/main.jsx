@@ -76,7 +76,7 @@ function App() {
   }
   function renameLife(id,name){setLibrary(prev=>prev.map(l=>l.id===id?{...l,name}:l));if(id===lifeId)setLifeName(name);}
   useEffect(()=>{if(page!=='input' || background.followupKey)return;const q=optionalFollowup(background);if(q)setBackground(prev=>prev.followupKey?prev:{...prev,followupKey:q.id,followupQuestion:q.question});},[page,background]);
-  const followup=background.followupKey==='model'?{question:background.followupQuestion,options:['说不清']}:savedFollowup(background);
+  const followup=['model','hard-conflict'].includes(background.followupKey)?{question:background.followupQuestion,options:['说不清']}:savedFollowup(background);
   function mutateLife(id,transform){const current=live.current?.id===id?live.current:libraryRef.current.find(l=>l.id===id);if(!current)return;const next=transform(current);const all=libraryRef.current.map(l=>l.id===id?next:l);libraryRef.current=all;setLibrary(all);if(live.current?.id===id){live.current=next;setMessages(next.messages);setMemories(next.memories);setCandidates(next.candidates);setContextStart(next.contextStart||0);setSessionMeta(next.sessionMeta||emptyReview());}setLifeStorageOkay(writeLives(draftStorage(),{activeId:live.current?.id,lives:all}));}
   function changeMemories(next){mutateLife(lifeId,l=>reviseMemories(l,next));}
   function changeCandidates(next){mutateLife(lifeId,l=>dismissCandidates(l,next));}
@@ -150,10 +150,10 @@ function App() {
     if (!latestStatus) {throw new Error('本地服务暂时无法连接，文字已保留。请确认服务开启后重试。');}
     setStatus(latestStatus);
       const result = await experience.getStory({ background:submitted, clarification:'',clarificationSkipped:direct || Boolean(submitted.followupKey) || Boolean(submitted.followupSkipped), previousSessionId: null });
-      if (result.kind === 'clarification') { setBackground(prev=>({...prev,followupKey:'model',followupQuestion:result.question,followupAnswer:'',followupSkipped:''}));return; }
+      if (result.kind === 'clarification') { setBackground(prev=>({...prev,followupKey:result.hard?'hard-conflict':'model',followupQuestion:result.question,followupAnswer:'',followupSkipped:''}));return; }
       setSessionMeta(emptyReview());setEditingProfile(false);setLifeId(crypto.randomUUID());setLifeName(archiveName({background:submitted,story:result.story}));setMemories([]);setCandidates([]);setContextStart(0);setEraContext(result.eraContext || []);
       setStory(result.story); setSessionId(result.sessionId); setStoryMode(result.mode);
-      setGeneratedBackground(structuredClone(submitted));
+      setGeneratedBackground(structuredClone(result.background||submitted));
       setSyncFailed(false); setMessages([]); setCorrections([]); setDraft(''); setIntent('chat'); setQuestion(''); setClarification(''); setPage('life');
     } catch (e) { setError(e.message);setGenerationFailed(true); }
     finally { requestLock.current = false; setBusy(false); experience.status().then(setStatus).catch(() => {}); }
