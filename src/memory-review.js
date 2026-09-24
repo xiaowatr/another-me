@@ -1,6 +1,6 @@
 // Conservative summaries of explicit user clauses, without inferring traits.
 export function summarizeMemory(value){
- let text=String(value||'').trim().replace(/^(?:更正|其实|说错了|之前说错了?)[，,:：\s]*/,'').replace(/[。！；\s]+$/,'');
+ let text=String(value||'').trim().replace(/^(?:我)?(?:更正|其实|说错了|之前说错了?)[，,:：\s]*/,'').replace(/[。！；\s]+$/,'');
  if(/^(?:学习|学过|正在学)/.test(text))text='我'+text.replace(/^学习/,'正在学习');
  if(/^(?:最近|近期)?(?:开始学|学摄影|喜欢|不喜欢)/.test(text))text='我'+text.replace(/^最近学/,'最近开始学');
  text=text.replace(/^(?:现在|如今)([^，,。]{1,30})我(?:也)?喜欢了$/, '我也喜欢$1').replace(/^我(?:现在|如今)(也)?/, '我$1');
@@ -80,7 +80,7 @@ export function completeReview(life,ids=life.candidates.filter(c=>candidateHasUs
 
 export function memoryClauses(value){
  return String(value||'').split(/(?<=[。！？；\n])/).flatMap(sentence=>{
- if(/^(?:更正|其实|说错了|之前说错)|[?？]|(?:但是|不过|然而|不再|不是)/.test(sentence))return [sentence.trim()];
+ if(/^(?:我)?(?:更正|其实|说错了|之前说错)|[?？]|(?:但是|不过|然而|不再|不是)/.test(sentence))return [sentence.trim()];
  const parts=sentence.split(/[，,]/);const own=/^(?:我|最近|近期|喜欢)/.test(parts[0].trim());
  return parts.map((part,i)=>{let p=part.trim();if(i&&own&&/^(?:周末|平时|通常|每天|每周|一直)?(?:喜欢|不喜欢|习惯|打算|计划)/.test(p))p='我'+p;return p.replace(/^我(周末|每天|每周)(喜欢|不喜欢)(.+)$/,'我$2$1$3');}).filter(Boolean);
  });
@@ -97,7 +97,7 @@ export function candidateHasUserSource(life,c){if(c.type==='fiction')return c.so
 // Only explicit user corrections can replace an earlier item. Ordinary additional interests coexist.
 function memoryParts(text){return String(text).split(/[；;，,]/).map(s=>s.replace(/[。\s]+$/,'')).filter(Boolean);}
 export function memoryCorrection(original,summary){
- if(!/^(?:更正|其实|说错了|之前说错)|不是|而是|改为/.test(original))return null;
+ if(!/^(?:我)?(?:更正|其实|说错了|之前说错)|不是|而是|改为/.test(original))return null;
  const category=summary.text.match(/^[^：]+：/)?.[0];if(!category)return null;
  const oldValue=original.match(/[，,]\s*(?:不是|不喜欢)\s*([^。；，,]+)/)?.[1]?.trim()||null;
  return {category,oldValue};

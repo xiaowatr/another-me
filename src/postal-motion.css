@@ -12,12 +12,12 @@
 .am-received-letter .paper-content{animation:am-reading-reveal 1s both}
 .am-reply-address{position:absolute;top:143px;left:25px;font-size:15px;color:#456051;z-index:4}
 .am-reply-postmark{position:absolute;top:125px;right:24px;width:60px;height:60px;border:1px dashed #778b70;border-radius:50%;font-size:10px;text-align:center;padding-top:12px;box-sizing:border-box;color:#667e60;z-index:4;transform:rotate(-13deg)}
-@keyframes am-reply-arrive{0%{opacity:0;transform:translate(-45%,22px) rotate(4deg)}15%,85%{opacity:1;transform:translate(-50%,0)}100%{opacity:0;transform:translate(-50%,12px)}}
+@keyframes am-reply-arrive{0%{opacity:0;transform:translate(-45%,22px) rotate(4deg)}15%,85%{opacity:1;transform:translate(-50%,0)}100%{opacity:1;transform:translate(-50%,0)}}
 @keyframes am-open-flap{0%,15%{transform:rotateX(0);z-index:4}35%,100%{transform:rotateX(180deg);z-index:1}}
-@keyframes am-extract-sheet{0%,32%{transform:translateY(0);z-index:2}64%{z-index:2}65%,82%{transform:translateY(-210px);z-index:5}100%{transform:translateY(-195px);z-index:5}}
+@keyframes am-extract-sheet{0%,32%{transform:translate(-50%,0);z-index:2}64%{z-index:2}65%,75%{transform:translate(-50%,-210px);z-index:5;width:86%;height:160px;top:42px}100%{transform:translate(-50%,0);z-index:5;top:-180px;width:var(--reply-paper-width);height:var(--reply-paper-height)}}
 @keyframes am-unfold-top{0%,65%{transform:rotateX(0)}85%,100%{transform:rotateX(175deg)}}
 @keyframes am-unfold-bottom{0%,65%{transform:rotateX(0)}85%,100%{transform:rotateX(-175deg)}}
-@keyframes am-reading-reveal{0%,88%{opacity:0;clip-path:inset(0);transform:none}100%{opacity:1;clip-path:inset(0);transform:none}}
+@keyframes am-reading-reveal{0%,76%{opacity:0;clip-path:inset(0);transform:none}100%{opacity:1;clip-path:inset(0);transform:none}}
 @media(max-width:600px){.am-received-letter .opening-envelope{width:92%;height:185px}.am-received-letter .envelope-flap{height:105px}.am-received-letter .drawn-sheet{height:135px}.am-reply-address{top:126px;font-size:12px}.am-reply-postmark{top:110px;width:50px;height:50px;font-size:9px;padding-top:9px}}
 .life-home .am-letter-stack{display:block;max-width:760px;padding:18px 12px;margin:24px auto}.life-home .am-stack-card{padding:0;position:relative;transform:rotate(var(--letter-tilt));transition:transform .3s ease,box-shadow .3s ease;box-shadow:0 3px 8px #42513b0c;border-radius:4px;margin-top:-20px;background:linear-gradient(165deg,#fffaf0,#f4eedf);isolation:isolate}.life-home .am-stack-card:first-child{margin-top:0}.life-home .am-stack-card:before{display:none}.life-home .am-stack-card.is-selected{transform:translateY(-6px) translateX(8px) rotate(0);z-index:5;box-shadow:0 7px 15px #42513b14;margin-bottom:24px}.am-letter-select{display:block;width:100%;text-align:left;border:0;background:none;color:inherit;padding:22px 26px 28px;cursor:pointer;font:inherit}.am-letter-select:focus-visible{outline:2px solid #677b64;outline-offset:3px}.am-letter-select h2{margin:4px 0 9px;padding:0;font-size:23px;overflow-wrap:anywhere}.am-letter-select p{margin:0 0 8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.am-cover-postmark{display:block;font-size:10px;letter-spacing:.1em;color:#86907a;margin-bottom:12px}.am-letter-actions{padding:0 26px 25px}.am-stack-pages{display:flex;align-items:center;justify-content:center;gap:22px;font-size:13px}@media(max-width:600px){.life-home .am-letter-stack{padding:12px 4px}.am-letter-select{padding:20px 16px 28px}.am-letter-select h2{font-size:20px}.am-letter-actions{padding:0 16px 22px}.life-home .am-stack-card.is-selected{transform:translateY(-4px);}.am-reply-address{font-size:12px}}@media(prefers-reduced-motion:reduce){.life-home .am-stack-card{transition:none;transform:none}.life-home .am-stack-card.is-selected{transform:none}.am-received-letter .opening-envelope{display:none}.am-received-letter .paper-content{animation:none}}
 /* Interactive mailbox: native button, visible invitation, no business work in animation. */
@@ -34,3 +34,14 @@
 @keyframes am-hanging-note{0%,100%{transform:rotate(2deg)}50%{transform:rotate(-1deg)}}
 @media(max-width:600px){.am-mailbox-start{min-height:410px}.am-mailbox-start .am-mailbox{width:210px;height:315px}.am-mailbox-start .am-mailbox-letter{left:41px}.am-mailbox-start .am-mailbox-label{top:195px}}
 @media(prefers-reduced-motion:reduce){.am-mailbox-start .am-mailbox-letter,.am-mailbox-start:hover .am-mailbox-letter,.am-mailbox-start:focus-visible .am-mailbox-letter{animation:none;transform:none}.am-send-fold{animation:none}}
+/* The extracted sheet grows into the reading surface, in the same coordinate space. */
+.am-received-letter .drawn-sheet{left:50%;right:auto;width:86%;box-sizing:border-box;background:#fffcf3}
+.am-received-letter .paper-content{position:relative;z-index:3}
+.am-received-letter .envelope-back,.am-received-letter .envelope-pocket,.am-received-letter .am-reply-address,.am-received-letter .am-reply-postmark{animation:am-envelope-retire 1s both}
+.am-received-letter .sheet-fold{animation-duration:1s}
+@keyframes am-envelope-retire{0%,73%{opacity:1}100%{opacity:0;translate:0 55px}}
+.am-received-letter .drawn-sheet:after{content:'';position:absolute;inset:0;background:linear-gradient(transparent 33%,#d7cdbb33 33.15%,transparent 33.5%,transparent 66%,#d7cdbb33 66.15%,transparent 66.5%);pointer-events:none}
+@media(prefers-reduced-motion:reduce){.am-received-letter .paper-content{animation:none}.am-mail-route circle{display:none}}
+.am-received-letter .sheet-fold{height:80px}.am-received-letter .sheet-fold-top{animation:am-unfold-top 1s both,am-fold-clear 1s both}.am-received-letter .sheet-fold-bottom{animation:am-unfold-bottom 1s both,am-fold-clear 1s both}@keyframes am-fold-clear{0%,75%{opacity:1}90%,100%{opacity:0}}@media(max-width:600px){.am-received-letter .sheet-fold{height:67px}}
+.preview-paused .opening-envelope *{animation-play-state:paused!important;animation-delay:var(--frame)!important}
+.am-received-letter{background:transparent;border-color:transparent;box-shadow:none}

@@ -1,3 +1,4 @@
+import {dailyLifeIssue} from './daily-life.js';
 import {temporalIssues} from '../src/input-anchors.js';
 import {coordinates} from '../src/context.js';
 ﻿import { AppError } from './core.js';
@@ -7,6 +8,7 @@ export function checkStoryGrounding(story,background,temporal){
  const timeIssue=temporalIssues(story,background,temporal)[0];if(timeIssue)throw new AppError('background_conflict',422,{stage:'business',reason:timeIssue.reason==='outside_observation_window'?'outside_explicit_short_range':timeIssue.reason,field:timeIssue.field});
  const fields=[...['title','identity','intro','character','opening'].map(key=>({field:key,text:story[key]})),...(story.scenes||[]).flatMap((s,i)=>['time','title','text'].map(key=>({field:`scenes.${i}.${key}`,text:s[key]})))].filter(f=>typeof f.text==='string');
  const text=fields.map(f=>f.text).join('。');
+ for(const f of fields){const reason=dailyLifeIssue(f.text,background);if(reason)throw new AppError('background_conflict',422,{stage:'business',reason,field:f.field});}
  // Missing information alone is not a contradiction. Keep explicit constraints and sourced-policy checks.
  if(/求职市场[^。]{0,15}(?:动荡|萎缩|低迷)|招聘(?:名额|数量)[^。]{0,10}(?:下降|增加|减少)/.test(text))throw new AppError('background_conflict',422,{stage:'business',reason:'unsourced_trend'});
  return story;

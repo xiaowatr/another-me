@@ -47,7 +47,7 @@ const server = http.createServer(async (req, res) => {
       const input = await readBody(req);
       if (!input || typeof input !== 'object' || Array.isArray(input)) throw new AppError('input');
       if(pathname === '/api/session/restore')return json(res,200,app.restore(input));
-      if (pathname === '/api/story') return json(res, 200, await storyTrace.run(()=>app.story(input)));
+      if (pathname === '/api/story') {const controller=new AbortController();const disconnected=()=>{if(!res.writableEnded)controller.abort();};res.on('close',disconnected);try{const result=await storyTrace.run(()=>app.story(input,{signal:controller.signal}));if(!res.destroyed)return json(res,200,result);}finally{res.off('close',disconnected);}return;}
       if(pathname==='/api/timing'){
         if(!/^[a-f0-9-]{36}$/.test(input.requestId || ''))throw new AppError('input');
         const record={clientStartedAt:/^\d{4}-\d{2}-\d{2}T[0-9:.]+Z$/.test(input.startedAt||'')?input.startedAt:null,task:input.task==='story'?'story':'chat',clientTraceId:/^[a-f0-9-]{36}$/.test(input.clientTraceId||'')?input.clientTraceId:null,requestId:input.requestId,time:new Date().toISOString(),source:'browser',outcome:['success','failed','stopped','clarification','received','shown'].includes(input.outcome)?input.outcome:'unknown'};
@@ -58,8 +58,8 @@ const server = http.createServer(async (req, res) => {
       if (pathname === '/api/chat/stream') {
         const controller=new AbortController();res.on('close',()=>controller.abort());
         res.writeHead(200,{'Content-Type':'application/x-ndjson; charset=utf-8','Cache-Control':'no-cache, no-transform','X-Content-Type-Options':'nosniff','X-Accel-Buffering':'no'});res.flushHeaders();
-        const emit=data=>{if(!res.destroyed)res.write(JSON.stringify(data)+'\n');};
-        try{await app.chatStream(input,emit,controller.signal);}catch(e){emit({type:'error',error:errorMessages[e.category] || '回复中断，请手动重试。',category:e.category || 'network'});}finally{res.end();}return;
+        let streamId=/^[a-f0-9-]{36}$/.test(req.headers['x-client-trace-id']||'')?req.headers['x-client-trace-id']:null;const emit=data=>{if(data.requestId)streamId=data.requestId;if(data.type==='error'&&!data.requestId)data={...data,requestId:streamId};if(!res.destroyed)res.write(JSON.stringify(data)+'\n');};
+        try{await app.chatStream(input,emit,controller.signal);}catch(e){emit({type:'error',error:errorMessages[e.category] || '回复中断，请手动重试。',category:e.category || 'network',requestId:e.requestId});}finally{res.end();}return;
       }
       // All production chat uses the streaming route and explicit confirmed memories.
       return json(res, 404, { error: '接口不存在。' });

@@ -78,3 +78,17 @@
 .memory-item textarea{box-sizing:border-box;border-radius:10px;margin-top:8px;padding:12px;line-height:1.7}
 .memory-panel>section+section{margin-top:28px}
 @media(max-width:600px){.memory-panel .memory-item,.wrap-up .memory-item{padding:16px}.memory-item .memory-actions .text-button{min-height:40px}.app-shell .chat-nav .text-button{padding:7px 12px;font-size:12px}.app-shell .in-chat .lives-entry{padding:7px 14px}}
+/* Mobile chat owns the visible viewport; only messages scroll. */
+@media(max-width:760px){
+.app-shell.in-chat{position:fixed;inset:auto 0;top:var(--chat-offset,0px);width:100%;max-width:none;height:var(--chat-viewport,100dvh);min-height:0;margin:0;padding:env(safe-area-inset-top,0px) 12px 0;overflow:hidden;box-sizing:border-box}
+.app-shell.in-chat header,.app-shell.in-chat footer{display:none}
+.app-shell.in-chat .app-fieldset{display:flex;flex-direction:column;border:0;padding:0;margin:0;width:100%;height:100%;min-height:0;min-width:0}
+.app-shell.in-chat main{display:flex;flex-direction:column;flex:1;height:100%;min-height:0;padding:0;margin:0;overflow:hidden}
+.app-shell.in-chat .lives-entry{flex:none;align-self:flex-start;margin:4px 0;padding:5px 12px;min-height:32px;font-size:12px}
+.app-shell.in-chat .chat-page{display:flex;flex-direction:column;flex:1;height:auto;min-height:0;width:100%;margin:0;padding:0 0 max(6px,env(safe-area-inset-bottom))}
+.app-shell.in-chat .chat-title{flex:none;gap:6px;margin:0 0 3px}.app-shell.in-chat .chat-title h1{font-size:14px}.app-shell.in-chat .chat-title p{font-size:10px;margin:0}.app-shell.in-chat .avatar{display:none}.app-shell.in-chat .chat-nav{gap:5px}.app-shell.in-chat .chat-nav .text-button{font-size:11px;padding:5px 9px;min-height:32px}.app-shell.in-chat .chat-nav button:first-child{display:none}
+.app-shell.in-chat .messages{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:6px 0;margin:0}.app-shell.in-chat .message{max-width:90%;flex-shrink:0}
+.app-shell.in-chat .closing-row{flex:none;margin:0;padding:3px 0}.app-shell.in-chat .closing-button{padding:5px 12px;min-height:32px;font-size:12px}.app-shell.in-chat .composer{flex:none;margin:0;padding:3px 0 0;align-items:flex-end}.app-shell.in-chat .composer .primary{padding:8px 14px;min-height:40px}.app-shell.in-chat .chat-page>.small{display:none}
+.app-shell.in-chat .chat-page>.error{flex:none;max-height:100px;overflow:auto;font-size:11px;margin:3px 0}.app-shell.in-chat .notice{padding:4px 8px;margin:2px 0;font-size:10px}.app-shell.in-chat .stream-actions{flex:none;font-size:11px;margin:2px 0}
+}
+.chat-page .message p{margin-block:0}.chat-page .message p:empty{display:none}

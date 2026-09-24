@@ -8,6 +8,7 @@ const rules=[
 ];
 export function optionalFollowup(b){
  try{const hard=hardQuestion(b);if(hard)return hard;if(b.followupKey || b.followupAnswer || b.followupSkipped || !b.realityOutcome?.trim() || !b.hypotheticalDirection?.trim())return null;
+ if(/未来|尚未|还未/.test(b.hypotheticalDirection+' '+b.realityOutcome)||/(?:最后|最终)(?:我)?(?:没有|没|并未)出发/.test(b.realityOutcome))return null;
  const text=[b.realityOutcome,b.choiceReason,b.details,b.feelings,b.why,b.reason].filter(Boolean).join(' ');
  const rule=rules.find(r=>r.match.test(text)&&!r.known.test(text));return rule?{id:rule.id,question:rule.question,options:[...new Set([...rule.options,'说不清'])]}:null;
  }catch{return null;}
