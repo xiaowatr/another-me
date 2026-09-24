@@ -2,11 +2,16 @@
 export function summarizeMemory(value){
  let text=String(value||'').trim().replace(/^(?:更正|其实|之前说错了?)[，,:：\s]*/,'').replace(/[。！；\s]+$/,'');
  if(/^(?:最近|近期)?(?:开始学|学摄影|喜欢|不喜欢)/.test(text))text='我'+text.replace(/^最近学/,'最近开始学');
+ text=text.replace(/^(?:现在|如今)([^，,。]{1,30})我(?:也)?喜欢了$/, '我也喜欢$1').replace(/^我(?:现在|如今)(也)?/, '我$1');
  if(!text||/[?？]|吗$|呢$|如果|假如|要是|可能|也许|假设|他说|她说|角色|另一个自己|我(?:觉得|好像|似乎)|(?:今天|现在).*(?:难过|开心|生气|烦|累)/.test(text))return null;
  if(/[，,].*(?:但是|不过|然而|不再)/.test(text))return null;
  text=text.split(/[，,]/)[0];
  if(/(?:今天|今晚|明天|这会儿|临时)/.test(text))return null;
  const rules=[
+ [/^我(?:刚刚|刚|最近)?(?:来到|到)([^，。！？]+?)(?:了)?$/,'reality',m=>'近期到达：'+m[1]],
+ [/^(?:我)?(?:准备|打算|计划)?(?:在([^，。！？]{1,20}))?(?:待|住|停留)([一二两三四五六七八九十百\d]+个?(?:月|周|星期|年))(?:吧|左右)?$/,'preference',m=>'停留计划：'+(m[1]?'在'+m[1]:'')+m[2]],
+ [/^(?:我)?(?:上一份|上份|之前的|原来的)工作(?:已经|已)?(?:辞职|辞掉)(?:了|不干了)?$/,'reality',()=> '工作近况：已离开上一份工作'],
+ [/^我(?:已经|刚刚|刚|最近)?辞职(?:了)?$/,'reality',()=> '工作近况：已辞职'],
  [/^我(?:一直|真的|非常|很|特别|比较|更|平时|通常|也)*(不喜欢|喜欢|喜爱|爱好)(.+)$/,'preference',m=>(m[1]==='不喜欢'?'不喜欢：':'兴趣偏好：')+m[2]],
  [/^(?:我)?希望你(.+)$/,'preference',m=>'交流偏好：'+m[1]],
  [/^请(?:你)?(不要|别|先)(.+)$/,'preference',m=>'交流偏好：'+m[1]+m[2]],
@@ -28,19 +33,19 @@ export function sameMemory(a,b){const x=memoryKey(a),y=memoryKey(b);if(x===y)ret
 export const emptyReview=()=>({organizedUntil:0,roundStart:0,suppressed:[],rounds:[],review:null,lastChatAt:null});
 export function proposeMemories(life){
  const meta={...emptyReview(),...life.sessionMeta},end=life.messages.length,start=Math.min(meta.organizedUntil,end),candidates=[],updatedCandidates=(life.candidates||[]).map(c=>({...c}));
- const known=[...(life.memories||[]),...(life.candidates||[]),...(meta.suppressed||[])];
+ const known=[...(life.memories||[]),...(life.candidates||[])];
  for(let i=start;i<end;i++){const m=life.messages[i];if(m.role!=='user'||m.status==='pending'||m.status==='failed')continue;
  if(m.kind==='closing')continue;
  const clauses=memoryClauses(m.text);
  for(let j=0;j<clauses.length;j++){const original=clauses[j],summary=summarizeMemory(original);if(!summary)continue;const text=summary.text;if(text.length<6||text.length>300||/[?？]|我在想|我觉得|我好像|我似乎|我在生气|我在难过|如果|假如|要是|可能|也许|假设|希望他|他说|她说|今天.*(?:难过|开心|烦|累)|现在.*(?:难过|生气|烦|累)/.test(text))continue;
  if(!summary)continue;
  const sourceId=m.id||`${life.id}:legacy:${i}`;
- const duplicate=known.some(k=>sameMemory(k.text,text)||k.sourceId===sourceId)||candidates.some(k=>sameMemory(k.text,text));
- const correction=memoryCorrection(original,summary);
+ const duplicate=(meta.suppressed||[]).some(k=>(k.sourceId===sourceId||i<(k.through??meta.organizedUntil))&&sameMemory(k.text,text))||known.some(k=>sameMemory(k.text,text)||k.sourceId===sourceId)||candidates.some(k=>sameMemory(k.text,text));
+ const correction=memoryCorrection(original,summary)||preferenceReversal(summary);
  const replacementEdits=[];
  if(correction){
   const pool=[...candidates,...updatedCandidates,...(life.memories||[])].filter(k=>k.sourceId!==sourceId);
-  const hits=pool.flatMap(k=>memoryParts(k.text).map((part,index)=>({k,part,index}))).filter(x=>(summarizeMemory(x.part)?.text||x.part).startsWith(correction.category)&&(!correction.oldValue||memoryKey(x.part).includes(memoryKey(correction.oldValue))));
+  const hits=pool.flatMap(k=>memoryParts(k.text).map((part,index)=>({k,part,index}))).filter(x=>(summarizeMemory(x.part)?.text||x.part).startsWith(correction.category)&&(!correction.oldValue||(correction.exact?memoryKey(x.part.split('：').slice(1).join('：'))===memoryKey(correction.oldValue):memoryKey(x.part).includes(memoryKey(correction.oldValue)))));
   // An unnamed correction is safe only when it identifies one existing preference.
   if(correction.oldValue||hits.length===1)for(const {k,part} of hits){
    const text=memoryParts(k.text).filter(p=>p!==part).join('；');
@@ -64,8 +69,8 @@ export function finishReview(life,now=new Date().toISOString(),extract=proposeMe
  try{const result=extract(life);return {...life,candidates:[...(result.updatedCandidates||life.candidates||[]),...result.candidates],sessionMeta:{...meta,organizedUntil:result.through,roundStart:round.end,startedAt:null,review:{...round,status:'complete'},rounds:[...meta.rounds.filter(r=>r.id!==round.id),round]}};}
  catch{return {...life,sessionMeta:{...meta,review:{...round,status:'failed'}}};}
 }
-export function dismissCandidates(life,next){const removed=(life.candidates||[]).filter(c=>!next.some(n=>n.id===c.id));return {...life,candidates:next,sessionMeta:{...emptyReview(),...life.sessionMeta,suppressed:[...(life.sessionMeta?.suppressed||[]),...removed.map(c=>({text:c.text,sourceId:c.sourceId}))]}};}
-export function reviseMemories(life,next){const changed=(life.memories||[]).filter(m=>!next.some(n=>m.id===n.id&&m.text===n.text&&m.type===n.type));return {...life,memories:next,contextStart:changed.length?life.messages.length:life.contextStart,sessionMeta:{...emptyReview(),...life.sessionMeta,startedAt:life.sessionMeta?.startedAt||next.find(m=>m.savedAt&&!life.memories.some(old=>old.id===m.id&&old.savedAt===m.savedAt))?.savedAt||null,suppressed:[...(life.sessionMeta?.suppressed||[]),...changed.map(m=>({text:m.text,sourceId:m.sourceId}))]}};}
+export function dismissCandidates(life,next){const removed=(life.candidates||[]).filter(c=>!next.some(n=>n.id===c.id));return {...life,candidates:next,sessionMeta:{...emptyReview(),...life.sessionMeta,suppressed:[...(life.sessionMeta?.suppressed||[]),...removed.map(c=>({text:c.text,sourceId:c.sourceId,through:life.messages.length}))]}};}
+export function reviseMemories(life,next){const changed=(life.memories||[]).filter(m=>!next.some(n=>m.id===n.id&&m.text===n.text&&m.type===n.type));return {...life,memories:next,contextStart:changed.length?life.messages.length:life.contextStart,sessionMeta:{...emptyReview(),...life.sessionMeta,startedAt:life.sessionMeta?.startedAt||next.find(m=>m.savedAt&&!life.memories.some(old=>old.id===m.id&&old.savedAt===m.savedAt))?.savedAt||null,suppressed:[...(life.sessionMeta?.suppressed||[]),...changed.map(m=>({text:m.text,sourceId:m.sourceId,through:life.messages.length}))]}};}
 
 export function completeReview(life,ids=life.candidates.filter(c=>candidateHasUserSource(life,c)&&['reality','preference'].includes(c.type)).map(c=>c.id)){
  let next=[...life.memories];for(const c of life.candidates.filter(c=>ids.includes(c.id)&&c.sourceRole!=='assistant'&&['reality','preference'].includes(c.type)&&c.text.trim())){for(const edit of c.replacementEdits||[]){next=next.flatMap(m=>m.id!==edit.id||m.text!==edit.previousText?[m]:edit.text?[{...m,text:edit.text,type:edit.text.startsWith('正在学习：')&&!edit.text.includes('兴趣偏好：')?'reality':m.type}]:[]);}if(!next.some(m=>m.id!==c.id&&m.id!==c.replacesId&&sameMemory(m.text,c.text))){next=next.filter(m=>m.id!==c.replacesId&&m.id!==c.id);next.push({...c,text:c.text.trim(),savedAt:new Date().toISOString()});}}
@@ -93,6 +98,12 @@ function memoryParts(text){return String(text).split('；').map(s=>s.replace(/[�
 export function memoryCorrection(original,summary){
  if(!/^(?:更正|其实|之前说错)|不是|而是|改为/.test(original))return null;
  const category=summary.text.match(/^[^：]+：/)?.[0];if(!category)return null;
- const oldValue=original.match(/[，,]\s*不是\s*([^。；，,]+)/)?.[1]?.trim()||null;
+ const oldValue=original.match(/[，,]\s*(?:不是|不喜欢)\s*([^。；，,]+)/)?.[1]?.trim()||null;
  return {category,oldValue};
 }
+
+// Match only an explicit opposite preference for the same object, including user-edited summaries.
+function preferenceReversal(summary){const m=summary.text.match(/^(兴趣偏好|不喜欢)：(.+?)[。]?$/);return m?{category:m[1]==='兴趣偏好'?'不喜欢：':'兴趣偏好：',oldValue:m[2].replace(/。$/,''),exact:true}:null;}
+
+// Explicit user action rechecks old messages while preserving deletion/edit suppression.
+export function revisitMemories(life){const meta={...emptyReview(),...life.sessionMeta};return finishReview({...life,sessionMeta:{...meta,organizedUntil:0,review:null}});}

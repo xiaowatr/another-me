@@ -1,16 +1,10 @@
+import {temporalIssues} from '../src/input-anchors.js';
 import {coordinates} from '../src/context.js';
 ﻿import { AppError } from './core.js';
 // Conservative guard for common claims about the real past. It is not a semantic verifier.
-export function checkStoryGrounding(story,background){
+export function checkStoryGrounding(story,background,temporal){
  const source=JSON.stringify(background);
- // Only explicit short ranges with a known start year; do not constrain present-day opening/identity.
- const requested=[background.hypotheticalDirection,background.details,background.followupSkipped?'':background.followupAnswer].filter(Boolean).join('。');
- const shortRange=/(?:只写|只看|仅写|仅看)[^。；]{0,25}(?:[一二两三四五六七八九]|[1-9])个月/.test(requested);
- const startYear=coordinates(background).forkYear;
- if(shortRange && Number.isInteger(startYear))for(const [i,scene] of (story.scenes||[]).entries()){
-  const year=String(scene.time).match(/((?:19|20)\d{2})年/);
-  if(year && (Number(year[1])<startYear || Number(year[1])>startYear+1))throw new AppError('background_conflict',422,{stage:'business',reason:'outside_explicit_short_range',field:`scenes.${i}.time`});
- }
+ const timeIssue=temporalIssues(story,background,temporal)[0];if(timeIssue)throw new AppError('background_conflict',422,{stage:'business',reason:timeIssue.reason==='outside_observation_window'?'outside_explicit_short_range':timeIssue.reason,field:timeIssue.field});
  const fields=[...['title','identity','intro','character','opening'].map(key=>({field:key,text:story[key]})),...(story.scenes||[]).flatMap((s,i)=>['time','title','text'].map(key=>({field:`scenes.${i}.${key}`,text:s[key]})))].filter(f=>typeof f.text==='string');
  const text=fields.map(f=>f.text).join('。');
  // Missing information alone is not a contradiction. Keep explicit constraints and sourced-policy checks.

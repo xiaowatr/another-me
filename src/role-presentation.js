@@ -1,0 +1,4 @@
+﻿import {roleGender} from './input-anchors.js';
+// Remove only standalone self-metadata fragments, not other people's pronouns or user text.
+export function rolePresentation(text,background={}){if(roleGender(background))return text;return String(text||'').replace(/(^|[。！？\n；·|，])\s*(?:(?:我的)?性别[：:]?\s*(?:未知|未填写|不详)|(?:我的)?性别(?:在这里)?(?:并)?不重要)\s*(?=$|[。！？\n；·|，])/g,'$1').replace(/([·|，；])\s*(?=[·|，；]|$)/g,'').replace(/^[\s·|，；。]+|[\s·|，；]+$/g,'').trim();}
+export function presentNewStory(story,b){return Object.fromEntries(Object.entries(story).map(([k,v])=>[k,typeof v==='string'?rolePresentation(v,b):k==='scenes'?v.map(scene=>Object.fromEntries(Object.entries(scene).map(([key,text])=>[key,rolePresentation(text,b)]))):v]));}

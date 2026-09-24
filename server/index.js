@@ -1,3 +1,4 @@
+import {makeStoryTrace} from './story-timing.js';
 ﻿import { usageReport } from './usage.js';
 import { randomBytes } from 'node:crypto';
 import http from 'node:http';
@@ -30,6 +31,7 @@ const server = http.createServer(async (req, res) => {
   if (!production && !allowedHosts.has(req.headers.host)) return json(res, 403, { error: '不支持的访问地址。' });
   const pathname = new URL(req.url, 'http://127.0.0.1').pathname;
   if (pathname === '/healthz' && req.method === 'GET') return json(res,200,{ok:true});
+  const storyTrace=pathname==='/api/story'&&req.method==='POST'?makeStoryTrace(res,req.headers['x-client-trace-id']):null;
   if (pathname.startsWith('/api/')) {
     if(production && ['/api/usage','/api/stop'].includes(pathname))return json(res,404,{error:'接口不存在。'});
     if(production && !guard.accept(req.socket.remoteAddress || 'unknown',pathname)){res.setHeader('Retry-After','60');return json(res,429,{category:'rate_limit',error:'请求较频繁，请稍后再试。'});}
@@ -45,12 +47,12 @@ const server = http.createServer(async (req, res) => {
       const input = await readBody(req);
       if (!input || typeof input !== 'object' || Array.isArray(input)) throw new AppError('input');
       if(pathname === '/api/session/restore')return json(res,200,app.restore(input));
-      if (pathname === '/api/story') return json(res, 200, await app.story(input));
+      if (pathname === '/api/story') return json(res, 200, await storyTrace.run(()=>app.story(input)));
       if(pathname==='/api/timing'){
         if(!/^[a-f0-9-]{36}$/.test(input.requestId || ''))throw new AppError('input');
-        const record={requestId:input.requestId,time:new Date().toISOString(),source:'browser',outcome:['success','failed','stopped'].includes(input.outcome)?input.outcome:'unknown'};
-        for(const key of ['firstBodyMs','firstShownMs','completeMs','displayCompleteMs'])record[key]=Number.isFinite(input[key])&&input[key]>=0&&input[key]<3600000?input[key]:null;
-        fs.appendFileSync('.local/timings.jsonl',JSON.stringify(record)+'\n');return json(res,200,{ok:true});
+        const record={clientStartedAt:/^\d{4}-\d{2}-\d{2}T[0-9:.]+Z$/.test(input.startedAt||'')?input.startedAt:null,task:input.task==='story'?'story':'chat',clientTraceId:/^[a-f0-9-]{36}$/.test(input.clientTraceId||'')?input.clientTraceId:null,requestId:input.requestId,time:new Date().toISOString(),source:'browser',outcome:['success','failed','stopped','clarification','received','shown'].includes(input.outcome)?input.outcome:'unknown'};
+        for(const key of ['firstBodyMs','firstShownMs','completeMs','displayCompleteMs','responseReceivedMs','jsonParsedMs'])record[key]=Number.isFinite(input[key])&&input[key]>=0&&input[key]<3600000?input[key]:null;
+        fs.appendFileSync('.local/timings.jsonl',JSON.stringify(record)+'\n');if(process.env.REQUEST_DIAGNOSTICS!=='0')console.info(JSON.stringify({type:'browser_timing',...record}));return json(res,200,{ok:true});
       }
       if (pathname === '/api/chat/seen') return json(res,200,app.seen(input));
       if (pathname === '/api/chat/stream') {

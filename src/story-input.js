@@ -1,3 +1,4 @@
+import {hardQuestion} from './input-anchors.js';
 ﻿// Small, deterministic optional prompts. No model request and no future-life planning.
 const rules=[
  {id:'missing-event',match:/^(?:那时|那时候|当时|那年|那次|以前|后悔|不知道)[。！…\s]*$/,known:/$a/,question:'当时具体发生了什么事？',options:['说不清']},
@@ -6,7 +7,7 @@ const rules=[
  {id:'move-feeling',match:/(留在|没有离开|没离开|没搬|没有搬)/,known:/因为|喜欢|舍不得|担心|害怕|照顾|家人|费用|工作|说不清/,question:'当时留下来，对你最重要的是什么？',options:['熟悉的人与生活','当时的现实条件','还没有想好要不要离开']}
 ];
 export function optionalFollowup(b){
- try{if(b.followupKey || b.followupAnswer || b.followupSkipped || !b.realityOutcome?.trim() || !b.hypotheticalDirection?.trim())return null;
+ try{const hard=hardQuestion(b);if(hard)return hard;if(b.followupKey || b.followupAnswer || b.followupSkipped || !b.realityOutcome?.trim() || !b.hypotheticalDirection?.trim())return null;
  const text=[b.realityOutcome,b.choiceReason,b.details,b.feelings,b.why,b.reason].filter(Boolean).join(' ');
  const rule=rules.find(r=>r.match.test(text)&&!r.known.test(text));return rule?{id:rule.id,question:rule.question,options:[...new Set([...rule.options,'说不清'])]}:null;
  }catch{return null;}
