@@ -1,0 +1,2 @@
+import React,{useEffect,useRef} from 'react';
+export default function FollowupDialog({children,onClose}){const ref=useRef(null);useEffect(()=>{const before=document.activeElement;ref.current.showModal();return()=>before?.isConnected&&before.focus({preventScroll:true});},[]);return <dialog ref={ref} className="followup-dialog" aria-label="补充一个小问题" onCancel={e=>{e.preventDefault();onClose();}}><header><h2>补充一个小问题</h2><button type="button" className="text-button" onClick={onClose}>返回修改</button></header>{children}</dialog>;}

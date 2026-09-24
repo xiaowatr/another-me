@@ -1,3 +1,6 @@
+import FollowupDialog from './FollowupDialog';
+import {initialPage,savePage} from './page-position.js';
+import {watchChatViewport} from './chat-viewport.js';
 import {pendingStory} from './services/story-task-client.js';
 import {formError,requiredBackgroundFields} from './form-validation';
 import {revisitMemories} from './memory-review';
@@ -52,7 +55,9 @@ function App() {
   const messagesBox=useRef(null),chatPositions=useRef(new Map());
   const composer=useRef(null),composing=useRef(false);
   const [savedDraft] = useState(() => readDraft(draftStorage()));
-  const [page, setPage] = useState(() => pendingStory() ? 'input' : Object.entries(savedDraft.background).some(([key,value])=>key!=='inputVersion' && Boolean(value)) ? 'input' : savedLives.lives.length ? 'lives' : 'home');
+  const [page, setPage] = useState(() => initialPage(draftStorage(),savedLives,Object.entries(savedDraft.background).some(([key,value])=>key!=='inputVersion'&&Boolean(value)),pendingStory()));
+  const [followupOpen,setFollowupOpen]=useState(false);
+  useEffect(()=>savePage(draftStorage(),page,lifeId),[page,lifeId]);
   useEffect(()=>setStoryInfoOpen(false),[page,lifeId]);
   const [step, setStep] = useState(0);
   const [background, setBackground] = useState(migrateBackground({...empty,...savedDraft.background}));
@@ -88,18 +93,17 @@ function App() {
     setSavedNotice('');setLifeId(id);setLifeName(archiveName(life));setStory(life.story);setGeneratedBackground(life.background);setMessages(life.messages);setDraft(life.draft || '');setMemories(life.memories || []);setCandidates(life.candidates || []);setContextStart(life.contextStart || 0);setEraContext(life.eraContext || []);setStoryMode(life.mode);setSessionId(null);setError('');setTiming(null);setSyncFailed(false);setSessionMeta({...emptyReview(),...life.sessionMeta});setEditingProfile(false);setAboutOpen(destination==='about');setPage(destination==='life'?'life':'chat');
   }
   function renameLife(id,name){setLibrary(prev=>prev.map(l=>l.id===id?{...l,name}:l));if(id===lifeId)setLifeName(name);}
-  useEffect(()=>{if(page!=='input' || background.followupKey)return;const q=optionalFollowup(background);if(q)setBackground(prev=>prev.followupKey?prev:{...prev,followupKey:q.id,followupQuestion:q.question});},[page,background]);
-  const followup=hardQuestion(background)||(['model','hard-conflict'].includes(background.followupKey)?{question:background.followupQuestion,options:['说不清']}:savedFollowup(background));
+  const followup=hardQuestion(background)||(['model','hard-conflict'].includes(background.followupKey)?{question:background.followupQuestion,options:['说不清']}:savedFollowup(background)||optionalFollowup(background));
   function mutateLife(id,transform){const current=live.current?.id===id?live.current:libraryRef.current.find(l=>l.id===id);if(!current)return;const next=transform(current);const all=libraryRef.current.map(l=>l.id===id?next:l);libraryRef.current=all;setLibrary(all);if(live.current?.id===id){live.current=next;setMessages(next.messages);setMemories(next.memories);setCandidates(next.candidates);setContextStart(next.contextStart||0);setSessionMeta(next.sessionMeta||emptyReview());}const okay=writeLives(draftStorage(),{activeId:live.current?.id,lives:all});setLifeStorageOkay(okay);return {next,okay};}
   function changeMemories(next){mutateLife(lifeId,l=>reviseMemories(l,next));}
   function changeCandidates(next){mutateLife(lifeId,l=>dismissCandidates(l,next));}
   function returnLives(){setEditingProfile(false);setAboutOpen(false);setPage('lives');}
   function newLife(){setFormOrigin('lives');setError('');setGenerationFailed(false);setSyncFailed(false);setClearedDraft(null);setTiming(null);setDetailsOpen(false);setSavedNotice('');setEditingProfile(false);setQuestion('');setClarification('');setPage('input');}
   function deleteLife(id){if(requestLock.current)return;reviewJobs.current.delete(id);const all=libraryRef.current.filter(l=>l.id!==id);libraryRef.current=all;setLibrary(all);if(lifeId===id){live.current=null;setLifeId(null);setStory(null);setMessages([]);setCandidates([]);setMemories([]);setSessionMeta(emptyReview());}const okay=writeLives(draftStorage(),{activeId:lifeId===id?null:lifeId,lives:all});setLifeStorageOkay(okay&&removeLifeBackup(draftStorage(),id));setPage('lives');}
-  async function endChat(){const id=lifeId;if(reviewJobs.current.has(id))return;reviewJobs.current.add(id);setWrapWorkingId(id);setAboutOpen(false);const t=activeTurn.current;
+  async function endChat(){let memoryChanged=false;const id=lifeId;if(reviewJobs.current.has(id))return;reviewJobs.current.add(id);setWrapWorkingId(id);setAboutOpen(false);const t=activeTurn.current;
     try{if(t){await stopReply();await t.finished;await new Promise(resolve=>setTimeout(resolve,0));}
-      const result=mutateLife(id,l=>{const ended=page==='chat'?closeConversation(l):l;const reviewed=finishReview(ended);if(reviewed.sessionMeta.review?.status==='failed')return reviewed;try{return completeReview(reviewed);}catch{return {...reviewed,sessionMeta:{...reviewed.sessionMeta,review:{...reviewed.sessionMeta.review,status:'failed'}}};}});
-      if(result?.okay){setSavedNotice(result.next.sessionMeta.review?.status==='failed'?'聊天已保存，但记忆整理未完成，请打开这条人生的资料与记忆处理。':'聊天已保存，下次接着聊');returnLives();}else setError('暂时无法保存，请保留当前页面。');
+      const result=mutateLife(id,l=>{const ended=page==='chat'?closeConversation(l):l;const reviewed=finishReview(ended);if(reviewed.sessionMeta.review?.status==='failed')return reviewed;try{const done=completeReview(reviewed);memoryChanged=JSON.stringify(done.memories)!==JSON.stringify(l.memories);return done;}catch{return {...reviewed,sessionMeta:{...reviewed.sessionMeta,review:{...reviewed.sessionMeta.review,status:'failed'}}};}});
+      if(result?.okay){setSavedNotice(result.next.sessionMeta.review?.status==='failed'?'聊天已保存，但记忆整理未完成，请打开这条人生的资料与记忆处理。':memoryChanged?'聊天已保存，这次记下了新的内容，可在资料与记忆中查看。':'聊天已保存，下次接着聊');returnLives();}else setError('暂时无法保存，请保留当前页面。');
     }finally{reviewJobs.current.delete(id);setWrapWorkingId(null);}
   }
   function saveSelected(ids){try{mutateLife(lifeId,l=>completeReview(l,ids));returnLives();}catch{setError('记忆已满，请先在关于我中整理已有内容。');}}
@@ -143,21 +147,22 @@ function App() {
   useEffect(() => { if (page === 'chat' && messages.length && followBottom.current) chatEnd.current?.scrollIntoView({ block: 'nearest' }); }, [messages]);
   useLayoutEffect(()=>{if(page==='chat'&&messagesBox.current)messagesBox.current.scrollTop=chatPositions.current.get(lifeId)??messagesBox.current.scrollHeight;},[page,lifeId]);
   useLayoutEffect(()=>{const el=composer.current;if(!el)return;el.style.height='0px';const h=Math.min(136,Math.max(40,el.scrollHeight));el.style.height=h+'px';el.style.overflowY=el.scrollHeight>136?'auto':'hidden';},[draft,page]);
-  useEffect(()=>{if(page!=='chat')return;const vv=window.visualViewport;const resize=()=>{document.documentElement.style.setProperty('--chat-viewport',(vv?.height||window.innerHeight)+'px');document.documentElement.style.setProperty('--chat-offset',(vv?.offsetTop||0)+'px');};resize();vv?.addEventListener('resize',resize);vv?.addEventListener('scroll',resize);return()=>{vv?.removeEventListener('resize',resize);vv?.removeEventListener('scroll',resize);};},[page]);
+  useEffect(()=>{if(page==='chat')return watchChatViewport(window,document.documentElement);},[page]);
   function cancelGeneration(){experience.cancelStory().catch(e=>setError(e.message));setStorageOkay(writeDraft(draftStorage(),{background,step,detailsOpen,question,clarification}));if(generation.current){generation.current.abort();generation.current=null;requestLock.current=false;setBusy(false);}}
   const navigate = (next) => { if(generation.current)cancelGeneration();else if(requestLock.current)return;if(page==='chat'&&messagesBox.current)chatPositions.current.set(lifeId,messagesBox.current.scrollTop);if(next==='input'&&page!=='input')setFormOrigin(page);if(next!=='input')setEditingProfile(false); setError(''); if(next==='input' && page==='life')setBackground(migrateBackground({...empty,...generatedBackground})); setPage(next); };
   function clearForm(){if(requestLock.current)return;setClearedDraft(prev=>prev || {background:{...background},question,clarification,detailsOpen});clearDraft(draftStorage());setBackground({...empty});setQuestion('');setClarification('');setDetailsOpen(false);setError('');}
   function undoClear(){if(!clearedDraft || requestLock.current)return;setBackground(clearedDraft.background);setQuestion(clearedDraft.question);setClarification(clearedDraft.clarification);setDetailsOpen(clearedDraft.detailsOpen);setClearedDraft(null);}
-  const update = (event) => { setClearedDraft(null); const {name,value}=event.target;setStorageOkay(null);setBackground(prev=>({...prev,[name]:value,...(['realityOutcome','hypotheticalDirection','birthYear','forkAge','locationText','choiceReason','details','lifeSituation'].includes(name)?{followupKey:'',followupQuestion:'',followupAnswer:'',followupSkipped:''}:{})})); setQuestion(''); setClarification(''); };
+  const update = (event) => { setClearedDraft(null); const {name,value}=event.target;setStorageOkay(null);setBackground(prev=>({...prev,[name]:value,...(['realityOutcome','hypotheticalDirection','birthYear','forkAge','locationText','choiceReason','details','lifeSituation'].includes(name)?{followupKey:'',followupQuestion:'',followupAnswer:'',followupSkipped:''}:{})})); setQuestion(''); setClarification('');setFollowupOpen(false); };
   const field = (name, label, placeholder, kind = 'textarea') => <label className="field">{label}{requiredBackgroundFields.includes(name)&&!label.includes('*')?' *':''}{kind === 'input' ? <input name={name} value={background[name]} onChange={update} placeholder={placeholder} maxLength={80}  /> : <textarea required={requiredBackgroundFields.includes(name)} name={name} value={background[name]} onChange={update} placeholder={placeholder} maxLength={1500}  rows={name === 'lifeSituation' ? 2 : name === 'details' ? 4 : 3} />}</label>;
   async function next(event, direct=false, recover=null) {
     event.preventDefault(); if (requestLock.current) return;setGenerationFailed(false);setStoryRetrying(false);
     const fields = ['realityOutcome','hypotheticalDirection'];setFailureId('');
-    if(!recover&&hardQuestion(background)){setBackground(b=>({...b,followupKey:'hard-conflict',followupSkipped:''}));setError('请先确认上方相互矛盾的信息，再继续。');return;}
+    if(!recover&&hardQuestion(background)){setBackground(b=>({...b,followupKey:'hard-conflict',followupSkipped:''}));setFollowupOpen(true);setError('');return;}
     if(!recover&&formError(background)){setError(formError(background));return;}
     if(!recover&&coordinateError(background)){setError(coordinateError(background));return;}
     if(!recover&&fields.some(key=>!background[key]?.trim())){setError('请写下想回到的瞬间，以及这次希望发生的变化。');return;}
-    setError('');
+    if(!recover&&!direct&&!editingProfile&&followup&&!background.followupAnswer?.trim()&&!background.followupSkipped){setBackground(b=>({...b,followupKey:b.followupKey||followup.id,followupQuestion:followup.question}));setFollowupOpen(true);return;}
+    setFollowupOpen(false);setError('');
     if(editingProfile){setGeneratedBackground(migrateBackground(background));setContextStart(messages.length);setSessionId(null);setEditingProfile(false);setSavedNotice('已保存');setPage('chat');setAboutOpen(true);return;}
     const submitted=recover?.input.background||{...migrateBackground(applyClarification(background)),...(hardQuestion(background)?{followupKey:'hard-conflict'}:{}),followupSkipped:direct || (background.followupKey&&!background.followupAnswer?.trim())?'1':background.followupSkipped};
     setBackground(submitted);setWaitingNote([]);
@@ -166,7 +171,7 @@ function App() {
       const result = await experience.getStory(recover?.input||{ background:submitted, clarification:'',clarificationSkipped:direct || Boolean(submitted.followupKey) || Boolean(submitted.followupSkipped), previousSessionId: null },controller.signal,clientTraceId,()=>setStoryRetrying(true),note=>{if(generation.current===controller)setWaitingNote(note);});
       reportStoryTiming(result.clientTiming,result.kind==='clarification'?'clarification':'received');
       if(generation.current!==controller)return;
-      if (result.kind === 'clarification') { setBackground(prev=>({...prev,followupKey:result.hard?'hard-conflict':'model',followupQuestion:result.question,followupAnswer:'',followupSkipped:''}));return; }
+      if (result.kind === 'clarification') { setFollowupOpen(true);setBackground(prev=>({...prev,followupKey:result.hard?'hard-conflict':'model',followupQuestion:result.question,followupAnswer:'',followupSkipped:''}));return; }
       const createdId=result.taskId||crypto.randomUUID();storyDisplayTiming.current={...result.clientTiming,lifeId:createdId,clientStarted};setFreshStoryId(createdId);historicMessages.current=new Set();setSessionMeta({...emptyReview(),lastVisitedAt:new Date().toISOString()});setEditingProfile(false);setLifeId(createdId);setLifeName(archiveName({background:submitted,story:result.story}));setMemories([]);setCandidates([]);setContextStart(0);setEraContext(result.eraContext || []);
       setStory(result.story); setSessionId(result.sessionId); setStoryMode(result.mode);
       setGeneratedBackground(structuredClone(result.background||submitted));
@@ -182,20 +187,20 @@ function App() {
     t.finished=new Promise(resolve=>t.resolveFinished=resolve);
     t.drain=new Promise(resolve=>t.resolveDrain=resolve);
     setMessages(prev=>retry?prev.map(m=>m.id===messageId?{...m,status:'pending'}:m):[...prev,{id:messageId,role:'user',text,status:'pending'}]);
-    if(!retry)setDraft('');composer.current?.focus();
+    if(!retry)setDraft('');composer.current?.focus({preventScroll:true});
     let failure=null;
     try{
-      const restored=await experience.restore({background:generatedBackground,story,memories,corrections:explicitCorrections(messages,contextStart),roleRecords:selectRoleRecords(roleRecords(messages,generatedBackground,memories,contextStart),text),history:modelHistory(messages,messageId,contextStart)},sessionId,t.controller.signal);
+      t.failureStage='restore';const restored=await experience.restore({background:generatedBackground,story,memories,corrections:explicitCorrections(messages,contextStart),roleRecords:selectRoleRecords(roleRecords(messages,generatedBackground,memories,contextStart),text),history:modelHistory(messages,messageId,contextStart)},sessionId,t.controller.signal);
       t.sessionId=restored.sessionId;setSessionId(restored.sessionId);setSyncFailed(false);
       if(t.stopped)throw new Error('已停止');
-      await streamReply({sessionId:t.sessionId,message:text,intent},{signal:AbortSignal.any([t.controller.signal,AbortSignal.timeout(100000)]),onEvent:e=>{
+      t.failureStage='stream';await streamReply({sessionId:t.sessionId,message:text,intent},{signal:AbortSignal.any([t.controller.signal,AbortSignal.timeout(100000)]),onEvent:e=>{
         if(t.stopped)return;
         if(e.type==='request')t.requestId=e.requestId;
         if(e.type==='start'){t.id=e.turnId;setCorrections(e.corrections);}
         if(e.type==='text'){if(t.firstBody==null)t.firstBody=Math.round(performance.now()-t.started);t.buffer+=e.text;if(!t.timer)flushTurn(t);}
         if(e.type==='done'){t.requestId=e.requestId || t.requestId;t.networkDone=Math.round(performance.now()-t.started);t.done=true;if(!t.timer)flushTurn(t);}
       }});
-      await t.drain;
+      await t.drain;t.failureStage=null;
       if(!t.stopped)setIntent('chat');
     }catch(e){if(!t.stopped){failure=e;setFailureId(e.requestId||t.requestId||'');t.buffer='';clearTimeout(t.timer);setError(e.message || '回复中断，输入和已显示内容已保留。');}}
     finally{
@@ -203,7 +208,7 @@ function App() {
       setMessages(prev=>prev.map(m=>m.id===messageId?{...m,status:t.stopped?'stopped':failure?'failed':'sent'}:m));
       clearTimeout(t.timer);
       const measures={firstBodyMs:t.firstBody,firstShownMs:t.firstShown,completeMs:t.networkDone ?? null,displayCompleteMs:Math.round(performance.now()-t.started),outcome:t.stopped?'stopped':failure?'failed':'success'};
-      setTiming(measures);if(t.requestId)fetch('/api/timing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({requestId:t.requestId,...measures})}).catch(()=>{});
+      setTiming(measures);if(t.requestId)reportStoryTiming({requestId:t.requestId,...measures},measures.outcome,{task:'chat',failureStage:t.failureStage||null});
       t.resolveFinished?.();activeTurn.current=null;requestLock.current=false;setBusy(false);setChatWaiting(false);experience.status().then(setStatus).catch(()=>{});
     }
   }
@@ -223,14 +228,14 @@ function App() {
       {page === 'input' && <section className="compact-form"><div className="form-top"><button type="button" className="text-button" onClick={()=>navigate(formOrigin)}>← 返回</button></div><h1 ref={heading} tabIndex={-1}>回到那个瞬间</h1>{notice}<p className="small">* 为必填；不确定或不愿透露可直接说明。生活补充可跳过。</p><form onSubmit={next} noValidate>
         {field('realityOutcome','你想回到哪个瞬间？ *','当时发生了什么，你实际做了什么选择？')}
         {field('hypotheticalDirection','如果那次不一样，你想让什么发生？ *','写下你想探索的变化。')}
-        {followup && !background.followupSkipped && <section className="gentle-question" aria-label="一个小问题"><p>{followup.question}</p><p className="small">{hardQuestion(background)?'请先确认这些互相矛盾的信息，再继续。':'补充后点击下方按钮继续，也可以跳过。'}</p><div className="question-options">{followup.options.map(option=><button type="button" key={option} aria-pressed={background.followupAnswer===option} onClick={()=>setBackground({...background,followupAnswer:option,followupSkipped:''})}>{option}</button>)}</div><label className="sr-only" htmlFor="followup-answer">也可以自己说</label><input id="followup-answer" value={background.followupAnswer || ''} maxLength={500} placeholder="也可以自己说" onChange={e=>setBackground({...background,followupAnswer:e.target.value,followupSkipped:''})}/><div className="am-followup-actions"><button type="submit" className="primary" disabled={busy}>按这个补充继续生成</button>{!hardQuestion(background)&&<button type="button" className="text-button" disabled={busy} onClick={e=>next(e,true)}>跳过，直接生成</button>}</div></section>}
+        {followupOpen && followup && <FollowupDialog onClose={()=>setFollowupOpen(false)}><section className="gentle-question" aria-label="一个小问题"><p>{followup.question}</p><p className="small">{hardQuestion(background)?'请先确认这些互相矛盾的信息，再继续。':'补充后点击下方按钮继续，也可以跳过。'}</p><div className="question-options">{followup.options.map(option=><button type="button" key={option} aria-pressed={background.followupAnswer===option} onClick={()=>setBackground({...background,followupAnswer:option,followupSkipped:''})}>{option}</button>)}</div><label className="sr-only" htmlFor="followup-answer">也可以自己说</label><input id="followup-answer" value={background.followupAnswer || ''} maxLength={500} placeholder="也可以自己说" onChange={e=>setBackground({...background,followupAnswer:e.target.value,followupSkipped:''})}/><div className="am-followup-actions"><button type="button" onClick={e=>next(e)} className="primary" disabled={busy}>按这个补充继续生成</button>{!hardQuestion(background)&&<button type="button" className="text-button" disabled={busy} onClick={e=>next(e,true)}>跳过，直接生成</button>}</div></section></FollowupDialog>}
         <section className="optional-fields" aria-label="当时的你"><h2 className="form-group-title">当时的你</h2><div className="coordinate-pair">{field('birthYear','出生年份','例如：2000','input')}<label className="field">性别 *<select name="gender" value={background.gender || ''} onChange={update}><option value="">请选择</option>{['女','男','非二元','不透露'].map(value=><option key={value} value={value}>{value}</option>)}</select></label>{field('forkAge','当时年龄','例如：17','input')}</div>
         {coordinates(background).forkYear && <p className="form-hint">那年大约是{coordinates(background).forkYear}年</p>}
         {field('locationText','当时所在地','城市或你愿意说的地方','input')}
         <h2 className="form-group-title">你想补充的</h2><div className="mbti-row"><label className="field">MBTI *<select name="mbti" value={background.mbti || ''} onChange={update}><option value="">请选择</option><option value="unknown">不确定</option>{MBTI_TYPES.map(type=><option key={type}>{type}</option>)}</select></label><details className="mbti-help"><summary>帮助</summary><p className="small">MBTI仅辅助表达风格，以你具体说的话为准，不决定职业、经历或人生结果。不确定也没关系。</p></details></div>
         {field('choiceReason','当时，你为什么这样选？','有没有什么让你犹豫，或者差一点改变主意？不记得可以写“不记得”。')}
         {field('details','还有什么希望这条人生保留，或不要写错？','没有补充可写“无”。不确定也可以直接说明。')}
-        {field('lifeSituation','当时的你，过着怎样的生活？（选填）','例如：在读大学；刚入职，和朋友合租。')}
+        {field('lifeSituation','当时的你，过着怎样的生活？（选填）','例如：在读大学，住宿舍；刚入职，和朋友合租。')}<p className="life-context-hint">（可以说说当时的环境和日常，让另一个自己的故事与回应更贴近你；不想补充也可以。）</p>
         </section>
         {pendingStory()&&<div className="draft-actions"><button type="button" className="secondary" disabled={busy} onClick={e=>next(e,false,pendingStory())}>恢复生成结果</button><button type="button" className="text-button" disabled={busy} onClick={()=>experience.cancelStory().then(()=>setError("已取消，草稿仍保留。")).catch(e=>setError(e.message))}>取消原任务</button></div>}<div className="form-bottom"><div className="draft-actions"><span className="draft-status" role="status">{storageOkay===null?'正在保存…':storageOkay?'已保存':'暂时无法保存，请先备份文字'}</span><button type="button" className="text-button" disabled={busy} onClick={clearForm}>一键清空</button>{clearedDraft && <button type="button" className="text-button" disabled={busy} onClick={undoClear}>撤销清空</button>}</div><button className="primary" disabled={busy}>{editingProfile?'保存资料':busy?'正在写信…':generationFailed?'重试生成':status?.mode==='real'?'生成平行人生 ↗':'查看演示人生 ↗'}</button></div>{error && <div role="alert" className="error"><p>{error}</p>{failureId&&<label>请求ID（可选中复制）<input readOnly value={failureId} onFocus={e=>e.target.select()}/></label>}</div>}
       </form></section>}

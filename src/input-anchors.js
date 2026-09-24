@@ -1,4 +1,4 @@
-﻿export const dateParts=text=>[...String(text||'').matchAll(/((?:19|20)\d{2})年(?:(\d{1,2})月)?/g)].map(m=>({year:+m[1],month:m[2]?+m[2]:null,text:m[0]})).filter(d=>d.month==null||d.month>=1&&d.month<=12);
+﻿export const dateParts=text=>[...String(text||'').matchAll(/((?:19|20)\d{2})年(?:(\d{1,2})月(?:(\d{1,2})日)?)?/g)].map(m=>({year:+m[1],month:m[2]?+m[2]:null,...(m[3]?{day:+m[3]}:{}),text:m[0]})).filter(d=>d.month==null||d.month>=1&&d.month<=12);
 export function timeAnchors(b,now=new Date()){
  const sources=['hypotheticalDirection','realityOutcome','details'].flatMap(field=>dateParts(b[field]).map(d=>({...d,field,source:b[field]})));
  const start=sources.find(d=>d.field==='hypotheticalDirection')||sources.find(d=>d.field==='realityOutcome')||null;
@@ -9,7 +9,7 @@ export function scenePhase(scene,b){const a=timeAnchors(b),d=dateParts(scene.tim
 export function temporalIssues(story,b,compiledTemporal){const a=compiledTemporal||timeAnchors(b),out=[];for(const [i,s] of (story.scenes||[]).entries()){
  const label=dateParts(s.time)[0],future=scenePhase(s,b)==='future';
  const rawMonths=a.observationRange?.match(/([0-9一二两三四五六七八九十]+)个月/)?.[1],months=rawMonths?(Number(rawMonths)||({'一':1,'二':2,'两':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'十':10}[rawMonths])):null;
- const w=a.window;const outside=d=>w?.start&&w?.end&&d&&(d.year<w.start.year||d.year>w.end.year||(d.month&&w.start.month&&d.year*12+d.month<w.start.year*12+w.start.month)||(d.month&&w.end.month&&d.year*12+d.month>w.end.year*12+w.end.month));
+ const w=a.window;out.push(...preciseWindowIssues(s,w,label,i));const outside=d=>w?.start&&w?.end&&d&&(d.year<w.start.year||d.year>w.end.year||(d.month&&w.start.month&&d.year*12+d.month<w.start.year*12+w.start.month)||(d.month&&w.end.month&&d.year*12+d.month>w.end.year*12+w.end.month));
  if(outside(label)&&! /回忆|此前|回顾/.test(s.time||''))out.push({field:'scenes.'+i,reason:'outside_observation_window'});
  if(months&&label?.month&&a.start?.month&&label.year*12+label.month>a.start.year*12+a.start.month+months&&!/回忆|此前|回顾/.test(s.time))out.push({field:'scenes.'+i,reason:'outside_explicit_month_range'});
  if(future&&!/未来|设想|可能|计划/.test(s.time||''))out.push({field:'scenes.'+i,reason:'unlabelled_future'});
@@ -48,14 +48,32 @@ export function hardQuestion(b){const conflicts=hardConflicts(applyClarification
 
 const smallNumber=s=>/^\d+$/.test(s)?Number(s):({'一':1,'二':2,'两':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'十':10}[s]??null);
 export function observationWindow(b,fork,now=new Date()){
- const sources=['hypotheticalDirection','details','followupAnswer'].filter(f=>f!=='followupAnswer'||!b.followupSkipped).flatMap(field=>String(b[field]||'').split(/[。；\n]/).flatMap(text=>{const m=text.match(/(?:未来|接下来|之后|以后|只写|只看|仅写|仅看|观察|从现在起|从当年|从那次|从(?:19|20)\d{2}年)[^。；]{0,35}?([0-9一二两三四五六七八九十]+)个月/);return m?[{field,text,months:smallNumber(m[1])}]:[]}));
+ const sources=['hypotheticalDirection','details','followupAnswer'].filter(f=>f!=='followupAnswer'||!b.followupSkipped).flatMap(field=>String(b[field]||'').split(/[。；\n]/).flatMap(text=>{
+ const normalized=text.replace(/半年/g,'六个月');const m=normalized.match(/(?:未来|接下来|之后|以后|只写|只看|仅写|仅看|观察|从现在起|从当年|从那次|从(?:19|20)\d{2}年)[^。；]{0,35}?([0-9一二两三四五六七八九十]+)个月/);
+ // Duration of the imagined stay; never reinterpret a stated past stay as this window.
+ const stay=!/(?:现实|过去|曾经|以前)/.test(text)&&(field==='hypotheticalDirection'||/(?:驻留|停留|旅居)/.test(b.hypotheticalDirection||''))?(normalized.match(/(?:驻留|停留|旅居)([0-9一二两三四五六七八九十]+)个月/)||normalized.match(/([0-9一二两三四五六七八九十]+)个月[^。；，,]{0,8}(?:驻留|停留|旅居)/)):null;
+ return m||stay?[{field,text,months:smallNumber((m||stay)[1]),...(stay?{scenarioDuration:true}:{})}]:[];
+ }));
  if(!sources.length)return null;const item=sources.at(-1);if(!item.months)return null;
- const explicitNow=/从现在|从今天|接下来/.test(item.text),explicitFork=/从当年|从那年|从那次|分[岔叉].{0,8}起|从(?:19|20)\d{2}年|之后|以后/.test(item.text),future=/未来/.test(item.text);
+ const explicitNow=/从现在|从今天|接下来/.test(item.text),explicitFork=Boolean(item.scenarioDuration)||/从当年|从那年|从那次|分[岔叉].{0,8}起|从(?:19|20)\d{2}年|之后|以后/.test(item.text),future=/未来/.test(item.text);
  const current={year:now.getFullYear(),month:now.getMonth()+1,day:now.getDate()};
  const different=fork&&(fork.year!==current.year||fork.month&&fork.month!==current.month);
  const anchor=explicitNow?'now':explicitFork?'fork':future&&different?'ambiguous':future?'now':'fork';
  const calculated=/^\d{4}$/.test(b.birthYear||'')&&/^\d+$/.test(b.forkAge||'')?{year:+b.birthYear+ +b.forkAge,month:null}:null;
- const start=anchor==='now'?current:anchor==='fork'?(fork?{year:fork.year,month:fork.month}:calculated):null;
- let end=null;if(start){if(start.month){const index=start.year*12+start.month-1+item.months;end={year:Math.floor(index/12),month:index%12+1};}else end={year:start.year+Math.ceil(item.months/12),month:null};}
+ const start=anchor==='now'?current:anchor==='fork'?(fork?{year:fork.year,month:fork.month,...(fork.day?{day:fork.day}:{})}:calculated):null;
+ let end=null;if(start){if(start.month){const index=start.year*12+start.month-1+item.months;end={year:Math.floor(index/12),month:index%12+1,...(start.day?{day:Math.min(start.day,new Date(Date.UTC(Math.floor(index/12),index%12+1,0)).getUTCDate())}:{})};}else end={year:start.year+Math.ceil(item.months/12),month:null};}
+ const deadline=sources.flatMap(s=>[...s.text.matchAll(/(?:截至|截止到?|到)\s*((?:19|20)\d{2})年(\d{1,2})月(\d{1,2})日|((?:19|20)\d{2})年(\d{1,2})月(\d{1,2})日截止/g)]).at(-1);if(deadline)end={year:+(deadline[1]||deadline[4]),month:+(deadline[2]||deadline[5]),day:+(deadline[3]||deadline[6])};
  return {months:item.months,anchor,start,end,precision:start?.month?'month':'unknown-month',sources};
+}
+
+// Exact-day checks only when the compiled window has exact endpoints.
+const utcDay=d=>d?.year&&d?.month&&d?.day?Date.UTC(d.year,d.month-1,d.day):null;
+function preciseWindowIssues(scene,w,label,index){if(!w?.start||!w?.end)return [];const end=utcDay(w.end),start=utcDay(w.start);if(end==null)return [];const issues=[];
+ for(const clause of String(scene.time+'。'+scene.text).split(/[。！？；\n]/)){
+  if(/回忆|曾经|想起|计划|打算|希望|如果/.test(clause))continue;
+  const explicit=dateParts(clause).find(d=>d.day);const bare=clause.match(/(?<![0-9])(1[0-2]|[1-9])月(\d{1,2})日/);let day=explicit?utcDay(explicit):bare&&label?.year?utcDay({year:label.year,month:+bare[1],day:+bare[2]}):null;
+  const weekday=clause.match(/(\d{1,2})月第([一二三四五1-5])个(?:周日|星期日|星期天)/);if(day==null&&weekday&&label?.year){const month=+weekday[1],n=Number(weekday[2])||'一二三四五'.indexOf(weekday[2])+1;const first=new Date(Date.UTC(label.year,month-1,1)).getUTCDay();day=Date.UTC(label.year,month-1,1+(7-first)%7+7*(n-1));}
+  if(day!=null&&(day>end||start!=null&&day<start))issues.push({field:'scenes.'+index,reason:'outside_explicit_day_range'});
+  const duration=clause.match(/(?:这|过去的?|整整|已经过了|持续了?|共|第)([0-9一二两三四五六七八九十百]+)天/);if(duration&&start!=null){const raw=duration[1],n=/^\d+$/.test(raw)?+raw:raw==='一百'?100:smallNumber(raw);if(n!=null&&n>Math.floor((end-start)/86400000)+1)issues.push({field:'scenes.'+index,reason:'outside_explicit_day_duration'});}
+ }return issues;
 }

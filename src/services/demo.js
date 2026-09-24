@@ -16,5 +16,5 @@ const replies = [
 ];
 export const demoProvider = {
   getStory: async () => demoStory,
-  reply: async ({ turn }) => replies[turn % replies.length],
+  reply: async ({ turn }) => replies[Math.max(0,Math.floor(Number(turn)||0)) % replies.length],
 };

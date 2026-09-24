@@ -8,7 +8,7 @@ export class AppError extends Error {
 export const errorMessages = {
   output_limit: '这次生成用尽了输出额度，故事未完成。填写内容已保留，请稍后手动重试。',
   capacity: '当前体验人数较多，请稍后再试。填写内容已保留。',
-  identity: '浏览器身份不可用，请允许本地保存后重试。',
+  identity: '未能识别此浏览器的连接。请保留草稿，刷新页面后重试；已有故事不会因此删除。',
   task_missing: '未找到可恢复的任务，可能已过期或服务已重启。草稿仍保留。',
   task_expired: '服务已重启，原任务无法恢复。草稿仍保留，请确认后重新生成。',
   task_input_changed: '还有另一份填写内容正在生成，请先恢复或取消它。',

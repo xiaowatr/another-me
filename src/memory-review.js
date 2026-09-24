@@ -1,10 +1,13 @@
 // Conservative summaries of explicit user clauses, without inferring traits.
 export function summarizeMemory(value){
  let text=String(value||'').trim().replace(/^(?:我)?(?:更正|其实|说错了|之前说错了?)[，,:：\s]*/,'').replace(/[。！；\s]+$/,'');
+ text=text.replace(/^(周末|平时|通常|每天|每周)我(喜欢|不喜欢|习惯)/,'我$2$1');
+ if(/^(?:最近|近期)(?:在学|正在学|开始学)/.test(text))text='我'+text;
+ if(/^(?:我)?(?:平时|通常|每周|周末)(?:经常|总是|会|都)(?!不会)(.+)$/.test(text))text=text.replace(/^(?:我)?(平时|通常|每周|周末)(?:经常|总是|会|都)(.+)$/,'我习惯$1$2');
  if(/^(?:学习|学过|正在学)/.test(text))text='我'+text.replace(/^学习/,'正在学习');
  if(/^(?:最近|近期)?(?:开始学|学摄影|喜欢|不喜欢)/.test(text))text='我'+text.replace(/^最近学/,'最近开始学');
  text=text.replace(/^(?:现在|如今)([^，,。]{1,30})我(?:也)?喜欢了$/, '我也喜欢$1').replace(/^我(?:现在|如今)(也)?/, '我$1');
- if(!text||/[?？]|吗$|呢$|如果|假如|要是|可能|也许|假设|他说|她说|角色|另一个自己|我(?:觉得|好像|似乎)|(?:今天|现在).*(?:难过|开心|生气|烦|累)/.test(text))return null;
+ if(!text||/[?？]|吗$|呢$|如果|假如|要是|可能|也许|假设|他说|她说|角色|另一个自己|我(?:觉得|好像|似乎)|(?:他|她|你)(?:平时|周末|喜欢|在学)|(?:今天|现在).*(?:难过|开心|生气|烦|累)/.test(text))return null;
  if(/[，,].*(?:但是|不过|然而|不再)/.test(text))return null;
  text=text.split(/[，,]/)[0];
  if(/(?:今天|今晚|明天|这会儿|临时)/.test(text))return null;
@@ -41,7 +44,7 @@ export function proposeMemories(life){
  for(let j=0;j<clauses.length;j++){const original=clauses[j],summary=summarizeMemory(original);if(!summary)continue;const text=summary.text;if(text.length<6||text.length>300||/[?？]|我在想|我觉得|我好像|我似乎|我在生气|我在难过|如果|假如|要是|可能|也许|假设|希望他|他说|她说|今天.*(?:难过|开心|烦|累)|现在.*(?:难过|生气|烦|累)/.test(text))continue;
  if(!summary)continue;
  const sourceId=m.id||`${life.id}:legacy:${i}`;
- const duplicate=(meta.suppressed||[]).some(k=>(k.sourceId===sourceId||i<(k.through??meta.organizedUntil))&&sameMemory(k.text,text))||known.some(k=>sameMemory(k.text,text)||k.sourceId===sourceId)||candidates.some(k=>sameMemory(k.text,text));
+ const duplicate=(meta.suppressed||[]).some(k=>(k.sourceId===sourceId||i<(k.through??meta.organizedUntil))&&sameMemory(k.text,text))||known.some(k=>sameMemory(k.text,text))||candidates.some(k=>sameMemory(k.text,text));
  const correction=memoryCorrection(original,summary)||preferenceReversal(summary);
  const replacementEdits=[];
  if(correction){
@@ -61,13 +64,13 @@ export function proposeMemories(life){
  }}
  const merged=mergeRelatedMemories(candidates.filter(c=>c.text)),selected=merged.slice(-5),deferred=merged.slice(0,-5);
  const through=deferred.length?Math.min(...deferred.map(c=>life.messages.findIndex((m,i)=>(m.id||life.id+':legacy:'+i)===c.sourceId))):end;
- return {candidates:selected,updatedCandidates:updatedCandidates.filter(c=>c.text),through};
+ return {candidates:selected,updatedCandidates:updatedCandidates.filter(c=>c.text),through,stats:{start,end,userMessages:life.messages.slice(start,end).filter(m=>m.role==='user'&&m.kind!=='closing'&&!['pending','failed'].includes(m.status)).length,candidates:selected.length}};
 }
 export function finishReview(life,now=new Date().toISOString(),extract=proposeMemories){
  const meta={...emptyReview(),...life.sessionMeta};
  if(meta.review?.end>=life.messages.length&&meta.review?.status==='complete')return life;
  const round=meta.review?.status==='failed'?meta.review:{id:`round:${life.id}:${meta.organizedUntil}:${life.messages.length}`,start:meta.roundStart,end:life.messages.length,endedAt:now,startedAt:meta.startedAt||now};
- try{const result=extract(life);return {...life,candidates:[...(result.updatedCandidates||life.candidates||[]),...result.candidates],sessionMeta:{...meta,organizedUntil:result.through,roundStart:round.end,startedAt:null,review:{...round,status:'complete'},rounds:[...meta.rounds.filter(r=>r.id!==round.id),round]}};}
+ try{const result=extract(life);return {...life,candidates:[...(result.updatedCandidates||life.candidates||[]),...result.candidates],sessionMeta:{...meta,organizedUntil:result.through,roundStart:round.end,startedAt:null,review:{...round,status:'complete',stats:result.stats},rounds:[...meta.rounds.filter(r=>r.id!==round.id),round]}};}
  catch{return {...life,sessionMeta:{...meta,review:{...round,status:'failed'}}};}
 }
 export function dismissCandidates(life,next){const removed=(life.candidates||[]).filter(c=>!next.some(n=>n.id===c.id));return {...life,candidates:next,sessionMeta:{...emptyReview(),...life.sessionMeta,suppressed:[...(life.sessionMeta?.suppressed||[]),...removed.map(c=>({text:c.text,sourceId:c.sourceId,through:life.messages.length}))]}};}

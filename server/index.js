@@ -2,7 +2,7 @@ import {createStoryTasks} from './story-tasks.js';
 import {authenticate,withOwner} from './request-owner.js';
 import {makeStoryTrace} from './story-timing.js';
 ﻿import { usageReport } from './usage.js';
-import { randomBytes } from 'node:crypto';
+import { randomBytes,randomUUID } from 'node:crypto';
 import http from 'node:http';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -35,6 +35,7 @@ const server = http.createServer(async (req, res) => {
   const pathname = new URL(req.url, 'http://127.0.0.1').pathname;
   if (pathname === '/healthz' && req.method === 'GET') return json(res,200,{ok:true});
   if (pathname.startsWith('/api/')) {
+    const requestId=/^[a-f0-9-]{36}$/.test(req.headers['x-client-trace-id']||'')?req.headers['x-client-trace-id']:randomUUID();const receivedAt=Date.now();res.setHeader('X-Trace-Id',requestId);
     if(production && ['/api/usage','/api/stop'].includes(pathname))return json(res,404,{error:'接口不存在。'});
     if(production && !guard.accept(req.socket.remoteAddress || 'unknown',pathname)){res.setHeader('Retry-After','60');return json(res,429,{category:'rate_limit',error:'请求较频繁，请稍后再试。'});}
     try {
@@ -58,7 +59,7 @@ const server = http.createServer(async (req, res) => {
         if(!/^[a-f0-9-]{36}$/.test(input.requestId || ''))throw new AppError('input');
         const record={clientStartedAt:/^\d{4}-\d{2}-\d{2}T[0-9:.]+Z$/.test(input.startedAt||'')?input.startedAt:null,task:input.task==='story'?'story':'chat',clientTraceId:/^[a-f0-9-]{36}$/.test(input.clientTraceId||'')?input.clientTraceId:null,requestId:input.requestId,time:new Date().toISOString(),source:'browser',outcome:['success','failed','stopped','clarification','received','shown'].includes(input.outcome)?input.outcome:'unknown'};
         for(const key of ['firstBodyMs','firstShownMs','completeMs','displayCompleteMs','responseReceivedMs','jsonParsedMs','recoveryWaitMs'])record[key]=Number.isFinite(input[key])&&input[key]>=0&&input[key]<3600000?input[key]:null;
-        record.recovered=input.recovered===true;record.aborted=input.aborted===true;record.errorCategory=['network','timeout','output_limit','invalid_response','background_conflict','capacity','busy','task_missing','task_expired'].includes(input.errorCategory)?input.errorCategory:null;
+        record.failureStage=['restore','stream','seen'].includes(input.failureStage)?input.failureStage:null;record.recovered=input.recovered===true;record.aborted=input.aborted===true;record.errorCategory=['network','timeout','output_limit','invalid_response','background_conflict','capacity','busy','task_missing','task_expired'].includes(input.errorCategory)?input.errorCategory:null;
         fs.appendFileSync('.local/timings.jsonl',JSON.stringify(record)+'\n');if(process.env.REQUEST_DIAGNOSTICS!=='0')console.info(JSON.stringify({type:'browser_timing',...record}));return json(res,200,{ok:true});
       }
       if (pathname === '/api/chat/seen') return json(res,200,withOwner(owner,()=>app.seen(input)));
@@ -66,11 +67,11 @@ const server = http.createServer(async (req, res) => {
         const controller=new AbortController();res.on('close',()=>controller.abort());
         res.writeHead(200,{'Content-Type':'application/x-ndjson; charset=utf-8','Cache-Control':'no-cache, no-transform','X-Content-Type-Options':'nosniff','X-Accel-Buffering':'no'});res.flushHeaders();
         let streamId=/^[a-f0-9-]{36}$/.test(req.headers['x-client-trace-id']||'')?req.headers['x-client-trace-id']:null;const emit=data=>{if(data.requestId)streamId=data.requestId;if(data.type==='error'&&!data.requestId)data={...data,requestId:streamId};if(!res.destroyed)res.write(JSON.stringify(data)+'\n');};
-        try{await withOwner(owner,()=>app.chatStream(input,emit,controller.signal));}catch(e){emit({type:'error',error:errorMessages[e.category] || '回复中断，请手动重试。',category:e.category || 'network',requestId:e.requestId});}finally{res.end();}return;
+        try{await withOwner(owner,()=>app.chatStream(input,emit,controller.signal));}catch(e){if(process.env.REQUEST_DIAGNOSTICS!=='0')console.info(JSON.stringify({type:'chat_request_error',requestId:e.requestId||streamId,category:e.category||'network',stage:e.diagnostic?.stage||'stream',reason:e.diagnostic?.reason||null,durationMs:Date.now()-receivedAt,codeVersion:app.status().version}));emit({type:'error',error:errorMessages[e.category] || '回复中断，请手动重试。',category:e.category || 'network',requestId:e.requestId});}finally{res.end();}return;
       }
       // All production chat uses the streaming route and explicit confirmed memories.
       return json(res, 404, { error: '接口不存在。' });
-    } catch (e) { const category = e instanceof AppError ? e.category : 'upstream'; return json(res, e instanceof AppError ? e.status : 500, { error: errorMessages[category] || '请求失败，请稍后重试。', category, requestId: e.requestId }); }
+    } catch (e) { const category = e instanceof AppError ? e.category : 'upstream';e.requestId||=requestId;if(process.env.REQUEST_DIAGNOSTICS!=='0')console.info(JSON.stringify({type:'api_error',requestId,route:pathname.replace(/tasks\/[a-f0-9-]+/,'tasks/:id'),category,durationMs:Date.now()-receivedAt,codeVersion:app.status().version})); return json(res, e instanceof AppError ? e.status : 500, { error: errorMessages[category] || '请求失败，请稍后重试。', category, requestId: e.requestId }); }
   }
   // 开发服务器不能向浏览器提供密钥、诊断或服务端源文件。
   let decoded; try { decoded = decodeURIComponent(req.url); } catch { res.writeHead(400); return res.end(); }

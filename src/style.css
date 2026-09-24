@@ -92,3 +92,7 @@
 .app-shell.in-chat .chat-page>.error{flex:none;max-height:100px;overflow:auto;font-size:11px;margin:3px 0}.app-shell.in-chat .notice{padding:4px 8px;margin:2px 0;font-size:10px}.app-shell.in-chat .stream-actions{flex:none;font-size:11px;margin:2px 0}
 }
 .chat-page .message p{margin-block:0}.chat-page .message p:empty{display:none}
+
+.followup-dialog{width:min(460px,calc(100vw - 32px));max-height:85dvh;overflow:auto;padding:22px;border:1px solid #d9dece;border-radius:14px;background:#faf8ef;color:#203c35;box-sizing:border-box}.followup-dialog::backdrop{background:#1e352e66}.followup-dialog header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0;padding:0;border:0}.followup-dialog h2{font-size:20px;margin:0}.followup-dialog .gentle-question{margin:14px 0 0;padding:0;border:0;background:none}.followup-dialog input{box-sizing:border-box;width:100%;font-size:16px}.followup-dialog .am-followup-actions{display:flex;flex-wrap:wrap;gap:10px}.followup-dialog .primary{white-space:normal}
+
+.life-context-hint{font-size:12px;line-height:1.6;color:#68776d;background:#f2f1e7;border:1px solid #e1e3d6;border-radius:9px;padding:9px 12px;margin:-3px 0 14px}
