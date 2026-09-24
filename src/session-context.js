@@ -19,8 +19,8 @@ export function safeHistory(history,background,memories=[]){return history.filte
 export function lifeContext(background,story,memories=[]){const b=activeBackground(background),t=timelineInput(b),review=reviewStory(story,b,memories);return {
  criticalFacts:criticalFacts(b,memories),
  sharedBeforeFork:{scope:coordinates(b).forkAge===0||/从出生|出生时/.test(b.hypotheticalDirection||'')?'从出生开始不同；现实成长经历不是共同前情':'只共享选择之前已明确的经历',birthYear:b.birthYear||null,gender:b.gender&&b.gender!=='不透露'?b.gender:null,locationAtFork:b.locationText||null,reportedSpeech:t.atFork.reportedSpeech},
- realUser:{events:t.atFork.eventAndMotivation,laterEvents:t.realityLater,feelings:t.atFork.feelings,unclassifiedSupplement:t.unclassifiedSupplement,confirmed:memories.filter(m=>m.type==='reality')},
- parallelCharacter:{chosenDirection:b.hypotheticalDirection,statedPossibilities:t.imagined.considerations,explicitPremises:t.imagined.explicitPremises,choiceAlreadyTaken:true,storyFacts:review.trusted,confirmed:memories.filter(m=>m.type==='fiction'&&!inspectFactText(m.text,b,{frame:'story',anchorYear:m.sourceYear??coordinates(b).forkYear,memories}).length && !inspectFactText(m.text,b,{memories}).length)},
+ realUser:{lifeSituation:b.lifeSituation||null,events:t.atFork.eventAndMotivation,laterEvents:t.realityLater,feelings:t.atFork.feelings,unclassifiedSupplement:t.unclassifiedSupplement,confirmed:memories.filter(m=>m.type==='reality')},
+ parallelCharacter:{chosenDirection:b.hypotheticalDirection,statedPossibilities:t.imagined.considerations,explicitPremises:t.imagined.explicitPremises,experienceScope:'只以storyFacts中已发生的角色经历为亲历；chosenDirection本身不证明出发或抵达',storyFacts:review.trusted,confirmed:memories.filter(m=>m.type==='fiction'&&!inspectFactText(m.text,b,{frame:'story',anchorYear:m.sourceYear??coordinates(b).forkYear,memories}).length && !inspectFactText(m.text,b,{memories}).length)},
  fork:coordinates(b),chatTime:chatClock(b),preferences:memories.filter(m=>m.type==='preference'),unknown:['未明确的现实背景保持未知；平行角色可合理补全不冲突的日常经历，不擅改关键事件','现实中的独立事件不因主角改变一个选择就自动改变；明确的改写设定除外'],
  };}
 

@@ -1,6 +1,7 @@
 // Conservative summaries of explicit user clauses, without inferring traits.
 export function summarizeMemory(value){
- let text=String(value||'').trim().replace(/^(?:更正|其实|之前说错了?)[，,:：\s]*/,'').replace(/[。！；\s]+$/,'');
+ let text=String(value||'').trim().replace(/^(?:更正|其实|说错了|之前说错了?)[，,:：\s]*/,'').replace(/[。！；\s]+$/,'');
+ if(/^(?:学习|学过|正在学)/.test(text))text='我'+text.replace(/^学习/,'正在学习');
  if(/^(?:最近|近期)?(?:开始学|学摄影|喜欢|不喜欢)/.test(text))text='我'+text.replace(/^最近学/,'最近开始学');
  text=text.replace(/^(?:现在|如今)([^，,。]{1,30})我(?:也)?喜欢了$/, '我也喜欢$1').replace(/^我(?:现在|如今)(也)?/, '我$1');
  if(!text||/[?？]|吗$|呢$|如果|假如|要是|可能|也许|假设|他说|她说|角色|另一个自己|我(?:觉得|好像|似乎)|(?:今天|现在).*(?:难过|开心|生气|烦|累)/.test(text))return null;
@@ -17,7 +18,7 @@ export function summarizeMemory(value){
  [/^请(?:你)?(不要|别|先)(.+)$/,'preference',m=>'交流偏好：'+m[1]+m[2]],
  [/^我(?:现在|目前)?住在(.+)$/,'reality',m=>'居住地：'+m[1]],
  [/^我来自(.+)$/,'reality',m=>'来自：'+m[1]],
- [/^我(?:(?:最近|近期|刚刚|刚)?开始学(?:习)?|(?:目前|现在|正在)?在学|最近在学)(.+)$/,'reality',m=>'正在学习：'+m[1]],
+ [/^我(?:(?:最近|近期|刚刚|刚)?开始学(?:习)?|(?:目前|现在|正在)?在学|正在学习|最近在学)(.+)$/,'reality',m=>'正在学习：'+m[1]],
  [/^我(?:学过)(.+)$/,'reality',m=>'学习经历：'+m[1]],
  [/^我(?:曾经)?做过(.+)$/,'reality',m=>'做过的事：'+m[1]],
  [/^我(?:正在|打算|计划|希望|想要|决定)(.+)$/,'preference',m=>'当前方向：'+m[1]],
@@ -45,13 +46,13 @@ export function proposeMemories(life){
  const replacementEdits=[];
  if(correction){
   const pool=[...candidates,...updatedCandidates,...(life.memories||[])].filter(k=>k.sourceId!==sourceId);
-  const hits=pool.flatMap(k=>memoryParts(k.text).map((part,index)=>({k,part,index}))).filter(x=>(summarizeMemory(x.part)?.text||x.part).startsWith(correction.category)&&(!correction.oldValue||(correction.exact?memoryKey(x.part.split('：').slice(1).join('：'))===memoryKey(correction.oldValue):memoryKey(x.part).includes(memoryKey(correction.oldValue)))));
+  const hits=pool.flatMap(k=>memoryParts(k.text).map((part,index)=>({k,part,index}))).filter(x=>(summarizeMemory(x.part)?.text||x.part).startsWith(correction.category)&&(!correction.oldValue||(correction.exact?memoryKey((summarizeMemory(x.part)?.text||x.part).split('：').slice(1).join('：'))===memoryKey(correction.oldValue):memoryKey(x.part).includes(memoryKey(correction.oldValue)))));
   // An unnamed correction is safe only when it identifies one existing preference.
   if(correction.oldValue||hits.length===1)for(const {k,part} of hits){
-   const text=memoryParts(k.text).filter(p=>p!==part).join('；');
+   const existingEdit=replacementEdits.find(e=>e.id===k.id);const text=memoryParts(existingEdit?existingEdit.text:k.text).filter(p=>p!==part).join('；');
    const draft=candidates.find(x=>x.id===k.id)||updatedCandidates.find(x=>x.id===k.id);
    if(draft){draft.text=text; if(text.startsWith('正在学习：')&&!text.includes('兴趣偏好：'))draft.type='reality';}
-   else replacementEdits.push({id:k.id,text,previousText:k.text});
+   else if(existingEdit)existingEdit.text=text;else replacementEdits.push({id:k.id,text,previousText:k.text});
   }
  }
  if(duplicate)continue;
@@ -79,7 +80,7 @@ export function completeReview(life,ids=life.candidates.filter(c=>candidateHasUs
 
 export function memoryClauses(value){
  return String(value||'').split(/(?<=[。！？；\n])/).flatMap(sentence=>{
- if(/^(?:更正|其实|之前说错)|[?？]|(?:但是|不过|然而|不再|不是)/.test(sentence))return [sentence.trim()];
+ if(/^(?:更正|其实|说错了|之前说错)|[?？]|(?:但是|不过|然而|不再|不是)/.test(sentence))return [sentence.trim()];
  const parts=sentence.split(/[，,]/);const own=/^(?:我|最近|近期|喜欢)/.test(parts[0].trim());
  return parts.map((part,i)=>{let p=part.trim();if(i&&own&&/^(?:周末|平时|通常|每天|每周|一直)?(?:喜欢|不喜欢|习惯|打算|计划)/.test(p))p='我'+p;return p.replace(/^我(周末|每天|每周)(喜欢|不喜欢)(.+)$/,'我$2$1$3');}).filter(Boolean);
  });
@@ -94,9 +95,9 @@ export function mergeRelatedMemories(items){const result=[];for(const item of it
 export function candidateHasUserSource(life,c){if(c.type==='fiction')return c.sourceRole==='assistant'||c.sourceRole==='user';if(c.sourceRole!=='user')return false;return life.messages.some(m=>m.role==='user'&&(m.id===c.sourceId||c.sourceId===life.id+':legacy:'+life.messages.indexOf(m))&&(!c.sourceText||c.sourceText===m.text));}
 
 // Only explicit user corrections can replace an earlier item. Ordinary additional interests coexist.
-function memoryParts(text){return String(text).split('；').map(s=>s.replace(/[。\s]+$/,'')).filter(Boolean);}
+function memoryParts(text){return String(text).split(/[；;，,]/).map(s=>s.replace(/[。\s]+$/,'')).filter(Boolean);}
 export function memoryCorrection(original,summary){
- if(!/^(?:更正|其实|之前说错)|不是|而是|改为/.test(original))return null;
+ if(!/^(?:更正|其实|说错了|之前说错)|不是|而是|改为/.test(original))return null;
  const category=summary.text.match(/^[^：]+：/)?.[0];if(!category)return null;
  const oldValue=original.match(/[，,]\s*(?:不是|不喜欢)\s*([^。；，,]+)/)?.[1]?.trim()||null;
  return {category,oldValue};

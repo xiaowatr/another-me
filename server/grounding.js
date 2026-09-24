@@ -13,6 +13,14 @@ export function checkStoryGrounding(story,background,temporal){
 }
 
 export function checkChatGrounding(text,background,memories=[],roleEvidence='',target=null){
+ // Check only explicit first-person recollections against established role evidence.
+ if(!/如果|假如|比喻|像是|仿佛|打算|想象/.test(text)){
+ const means=['飞机','火车','高铁','轮船','汽车'];
+ const established=means.filter(m=>new RegExp('(?:坐|乘|乘坐|搭乘|登上|上)'+m).test(roleEvidence));
+ const claimed=means.filter(m=>new RegExp('我(?:当年|那次|当时)[^。！？]{0,16}(?:坐|乘|乘坐|搭乘|登上|上)'+m).test(text));
+ if(established.length===1&&claimed.some(m=>m!==established[0]))throw new AppError('background_conflict',422,{stage:'business',reason:'role_transport_conflict'});
+ if(/我(?:最终|那次|当时)?(?:没有|没|并未)出发/.test(roleEvidence)&&/我(?:当年|那次|当时|已经)?(?:已经)?(?:踏上旅程|出发了)/.test(text)&&!/后来.{0,8}出发/.test(roleEvidence))throw new AppError('background_conflict',422,{stage:'business',reason:'role_departure_conflict'});
+ }
  const provided=JSON.stringify({background,memories:memories.filter(m=>m.type!=='fiction')});
  for(const m of String(text).matchAll(/我(?:以前|曾经|之前)?在([^，。！？]{2,12}?)(?:工作|上班|待)(?:过|了)?([一二两三四五六七八九十\d]+)年/g)){if(!roleEvidence.includes(m[1])||!roleEvidence.includes(m[2]+'年'))throw new AppError('background_conflict',422,{stage:'business',reason:'unsupported_role_career'});}
  if(target==='realUser')for(const m of String(text).matchAll(/你(?:最近|之前|以前|正在|开始)?(?:学过|在学|学了|学习)([^，。！？？]{1,20})/g)){const claim=m[1].replace(/(?:啊|呀|吧|呢|来着|对吧|对吗|对不对|了|嘛)+$/,'').trim();if(!/什么|哪些/.test(claim)&&!provided.includes(claim))throw new AppError('background_conflict',422,{stage:'business',reason:'unconfirmed_user_memory'});}

@@ -72,13 +72,14 @@ export function validateBackground(b) {
   if(b && 'realityOutcome' in b){
     if(!['realityOutcome','hypotheticalDirection'].every(k=>str(b[k],k==='forkTime'?80:1500)) || typeof b.details!=='string' || b.details.length>1500) throw new AppError('input');
     if(b.choiceReason && (typeof b.choiceReason!=='string'||b.choiceReason.length>1500))throw new AppError('input');
+    if(['不填写','unknown'].includes(b.gender))b={...b,gender:''};
     if(b.gender && !['女','男','非二元','不透露'].includes(b.gender))throw new AppError('input');
     if(b.mbti && b.mbti!=='unknown' && !MBTI_TYPES.includes(b.mbti))throw new AppError('input');
     if(coordinateError(b))throw new AppError('input');
     if(b.inputVersion==='3' && !['eventContext','originalWish'].every(k=>str(b[k],1500)))throw new AppError('input');
     if(!['3','4','5','6'].includes(b.inputVersion) && !b.forkTime?.trim() && !coordinates(b).forkYear)throw new AppError('input');
     if(b.inputVersion==='6')return activeBackground(b);
-    return Object.fromEntries(['gender','followupKey','followupQuestion','followupAnswer','followupSkipped','mbti','inputVersion','eventContext','originalWish',...(typeof b.locationText==='string'?['locationText']:[]),'birthYear','forkAge','forkYear','cityMode','city','cityType','why','feelings','realityOutcome','hypotheticalDirection','forkTime','keep','details','choice','age','reason','alternative'].map(k=>[k,typeof b[k]==='string'?b[k].trim().slice(0,1500):'']));
+    return Object.fromEntries(['lifeSituation','choiceReason','gender','followupKey','followupQuestion','followupAnswer','followupSkipped','mbti','inputVersion','eventContext','originalWish',...(typeof b.locationText==='string'?['locationText']:[]),'birthYear','forkAge','forkYear','cityMode','city','cityType','why','feelings','realityOutcome','hypotheticalDirection','forkTime','keep','details','choice','age','reason','alternative'].map(k=>[k,typeof b[k]==='string'?b[k].trim().slice(0,1500):'']));
   }
   if (!b || !['choice','age','reason','alternative','keep'].every(k => str(b[k], k === 'age' ? 80 : 1500)) || typeof b.details !== 'string' || b.details.length > 1500) throw new AppError('input');
   return Object.fromEntries(['choice','age','reason','alternative','keep','details'].map(k => [k,b[k].trim()]));

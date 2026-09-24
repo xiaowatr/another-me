@@ -7,7 +7,7 @@
   let data;
   try { data = await response.json(); } catch { const error=new Error('本地服务返回异常，请重新启动项目后重试。');error.timing=timing;throw error; }
   if(timing)timing.jsonParsedMs=Math.round(performance.now()-started);
-  if (!response.ok) {const error=new Error(data.error || '请求失败，请手动重试。');error.timing=timing;throw error;}
+  if (!response.ok) {const error=new Error(data.error || '请求失败，请手动重试。');error.timing=timing;error.requestId=data.requestId||timing?.requestId;throw error;}
   if(timing)data.clientTiming=timing;
   return data;
 }

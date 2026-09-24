@@ -58,3 +58,23 @@
 @media(max-width:600px){.in-chat{padding:0 12px;height:var(--chat-viewport,100dvh);overflow:hidden}.in-chat header,.in-chat footer{display:none}.in-chat .app-fieldset{height:100%;min-width:0}.in-chat main{height:100%;display:flex;flex-direction:column;min-height:0}.in-chat .lives-entry{flex:none;margin:0;min-height:36px}.in-chat .chat-page{flex:1;width:100%;height:auto;margin:0;padding:0 0 max(4px,env(safe-area-inset-bottom));min-height:0}.in-chat .chat-title{margin:0 0 4px;gap:4px}.in-chat .chat-title h1{font-size:16px}.in-chat .chat-title p{font-size:10px}.in-chat .chat-nav{margin-left:auto}.in-chat .chat-page>.small{font-size:10px;margin:2px 0}.in-chat .messages{padding:6px 0}.in-chat .composer .primary{min-height:40px;padding:8px 12px}}
 
 .speaker-label{display:block;font-size:10px;line-height:1.4;color:#71816d;margin-bottom:3px}
+/* Shared capsule controls: consistent shape and breathing room. */
+:root{--pill-radius:999px;--pill-line:#a3af9a;--pill-paper:#f8f6ec;--pill-ink:#45604e}
+.app-shell :is(.primary,.secondary,.closing-button,.question-options button){border-radius:var(--pill-radius);min-height:40px;padding:9px 20px;line-height:1.5}
+.app-shell :is(.lives-entry,.chat-nav .text-button,.about-dialog .text-button,.card-actions>.text-button,.am-letter-actions>.text-button,.page-top .text-button,.wrap-actions .text-button){border:1px solid var(--pill-line);border-radius:var(--pill-radius);background:var(--pill-paper);color:var(--pill-ink);padding:9px 20px;min-height:40px;line-height:1.5}
+.app-shell .home-lives-entry{padding:11px 25px;min-height:44px}
+.app-shell .about-dialog>.text-button{margin:4px 6px 12px 0}
+.app-shell .chat-nav{gap:8px;max-width:none}
+.app-shell .question-options button[aria-pressed=true]{background:#355343;color:white}
+.memory-panel .memory-item,.wrap-up .memory-item{display:block;min-width:0;border:1px solid #dedfd2;border-radius:16px;background:#fffcf4;box-shadow:0 3px 10px #34433606;padding:18px 20px;margin:12px 0 16px}
+.memory-panel .memory-item>.tag{display:inline-block;background:#edf0e5;border:0;border-radius:var(--pill-radius);padding:3px 10px;color:#61725f;font-size:11px}
+.memory-panel .memory-body{margin:12px 0 16px;line-height:1.85;white-space:pre-wrap;overflow-wrap:anywhere}
+.memory-item .memory-actions{display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px;margin-top:12px}
+.memory-item .memory-actions .text-button{border:1px solid var(--pill-line);border-radius:var(--pill-radius);background:var(--pill-paper);color:var(--pill-ink);padding:7px 16px;min-height:36px;line-height:1.5;margin:0}
+.memory-item .memory-actions .memory-delete{color:#8b6657;border-color:#d6c5b8;background:#fff9f1}
+.memory-item .memory-source{margin-top:12px;font-size:11px;color:#7b8576}
+.memory-item .memory-source summary{cursor:pointer;width:fit-content;padding:3px 0}
+.memory-item .memory-source p{margin:8px 0 0;line-height:1.7;overflow-wrap:anywhere}
+.memory-item textarea{box-sizing:border-box;border-radius:10px;margin-top:8px;padding:12px;line-height:1.7}
+.memory-panel>section+section{margin-top:28px}
+@media(max-width:600px){.memory-panel .memory-item,.wrap-up .memory-item{padding:16px}.memory-item .memory-actions .text-button{min-height:40px}.app-shell .chat-nav .text-button{padding:7px 12px;font-size:12px}.app-shell .in-chat .lives-entry{padding:7px 14px}}

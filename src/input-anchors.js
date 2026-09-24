@@ -28,12 +28,21 @@ export function hardConflicts(b){const out=[];for(const field of ['realityOutcom
  const m=clause.match(/(?:我|自己)(没有|没|并未|不)?(去|去了|离开|留下|留在)([^。；，,]*)/);if(m)claims.push({verb:m[2].replace('去了','去'),place:m[3].replace(/^了/,'').replace(/过$/,''),negative:!!m[1],source:clause});}
  for(let i=0;i<claims.length;i++)for(const prev of claims.slice(0,i)){const c=claims[i];if(/更正|纠正|其实|说错/.test(c.source))continue;if(prev.place===c.place&&((prev.verb===c.verb&&prev.negative!==c.negative)||!prev.negative&&!c.negative&&[prev.verb,c.verb].includes('离开')&&[prev.verb,c.verb].some(v=>v==='留在'||v==='留下')))out.push({field,sources:[prev.source,c.source],question:field==='realityOutcome'?'现实中那次究竟发生了什么？':'这次想探索哪一种选择？'});}
  }
+ for(const field of ['realityOutcome','hypotheticalDirection']){
+ const text=b[field]||'';const simultaneous=!/后来|之后|随后|年后|岁时.*岁时/.test(text);
+ const ages=[...text.matchAll(/(?:当时|那时|那年|我)?(?:是|才)?(\d{1,2})岁/g)].map(m=>m[1]);
+ if(field==='realityOutcome'&&simultaneous&&new Set(ages).size>1)out.push({field:'age',sources:[text],question:'当时究竟是几岁？'});
+ if(field==='realityOutcome'&&/去了[^，。；]+[，,].*(?:一直|始终)(?:留在|没离开)/.test(text))out.push({field,sources:[text],question:'现实中那次最终去了哪里？'});
+ const finalPlaces=[...text.matchAll(/(?:现实中?|最终|最后)(?:我)?(?:是)?(?:去(?:了)?|留在)([^，。；、\s]{1,12})/g)].map(m=>m[1]);
+ if(field==='realityOutcome'&&simultaneous&&new Set(finalPlaces).size>1&&!/更正|说错|其实/.test(text))out.push({field,sources:[text],question:'现实中那次最终去了哪里？'});
+ if(field==='hypotheticalDirection'&&!/更正|说错|其实|先.*再|后来|然后/.test(text)&&/(?:想|希望|假设|假如|这次).*(?:去|离开)/.test(text)&&/(?:想|希望|假设|假如|这次).*(?:留下|留在)/.test(text))out.push({field,sources:[text],question:'这次想探索离开，还是留下？'});
+ }
  const anchor=timeAnchors(b);if(anchor.window?.anchor==='ambiguous')out.push({field:'range',sources:anchor.window.sources.map(s=>s.text),question:'这'+anchor.window.months+'个月从现在开始，还是从故事中的那次经历开始？请在原输入中说明起点。'});
  const y=anchor.start?.year;if(y&&/^\d{4}$/.test(b.birthYear||'')&&/^\d+$/.test(b.forkAge||'')&& ![y-Number(b.birthYear),y-Number(b.birthYear)-1].includes(+b.forkAge))out.push({field:'time',sources:[b.birthYear,b.forkAge,String(y)],question:'出生年份、当时年龄和事件年份对不上，请核对后修改原填写项。'});
  return out;
 }
 export function roleGender(b){const change=(b.hypotheticalDirection||'').match(/(?:我是|出生时是|出生就是|变成)(?:一个|个)?(男生|男孩|男性|女生|女孩|女性|非二元)/);return change?(/男/.test(change[1])?'男':/女/.test(change[1])?'女':'非二元'):['女','男','非二元'].includes(b.gender)?b.gender:null;}
-export function applyClarification(b){b={...b};for(const field of ['realityOutcome','hypotheticalDirection']){const text=b[field]||'',matches=[...text.matchAll(/(?:更正|纠正|之前说错了)[：，,]\s*(?=我)/g)];if(matches.length){const last=matches.at(-1);b[field]=text.slice(last.index+last[0].length);}}const answer=b.followupSkipped?'':b.followupAnswer||'';if(b.followupKey!=='hard-conflict'||!answer)return b;const next={...b};const conflicts=hardConflicts(b),fields=[...new Set(conflicts.map(c=>c.field))];if(fields.length===1&&!['time','range'].includes(fields[0])&&!/现实[：:]|假设[：:]/.test(answer)&&answer!=='说不清')next[fields[0]]=answer.trim();for(const [label,key] of [['现实','realityOutcome'],['假设','hypotheticalDirection']]){const m=answer.match(new RegExp(label+'[：:]([^\\n]+)'));if(m)next[key]=m[1].trim();}return next;}
+export function applyClarification(b){b={...b};for(const field of ['realityOutcome','hypotheticalDirection']){const text=b[field]||'',matches=[...text.matchAll(/(?:更正|纠正|之前说错了)[：，,]\s*(?=我)/g)];if(matches.length){const last=matches.at(-1);b[field]=text.slice(last.index+last[0].length);}}const answer=b.followupSkipped?'':b.followupAnswer||'';if(b.followupKey!=='hard-conflict'||!answer)return b;const next={...b};const conflicts=hardConflicts(b),fields=[...new Set(conflicts.map(c=>c.field))];if(fields.length===1&&!['time','range','age'].includes(fields[0])&&!/现实[：:]|假设[：:]/.test(answer)&&answer!=='说不清')next[fields[0]]=answer.trim();for(const [label,key] of [['现实','realityOutcome'],['假设','hypotheticalDirection']]){const m=answer.match(new RegExp(label+'(?:中)?[：:]([^；;\\n]+)'));if(m)next[key]=m[1].trim();}const age=answer.match(/(?:年龄[：:]|当时(?:是)?)(\d{1,2})(?:岁)?/);if(age){next.forkAge=age[1];if(!/现实[：:]/.test(answer))next.realityOutcome=next.realityOutcome.replace(/\d{1,2}岁/g,age[1]+'岁');}return next;}
 
 export function hardQuestion(b){const conflicts=hardConflicts(applyClarification(b));return conflicts.length?{id:"hard-conflict",question:[...new Set(conflicts.map(c=>c.question))].join(" "),options:[]}:null;}
 
