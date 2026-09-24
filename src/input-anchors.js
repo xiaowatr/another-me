@@ -5,14 +5,15 @@ export function timeAnchors(b,now=new Date()){
  const window=observationWindow(b,start,now);
  return {window,start,sources,asOf:now.toISOString().slice(0,10),currentYear:now.getFullYear(),currentMonth:now.getMonth()+1,observationRange:(b.hypotheticalDirection||'').match(/(?:只写|只看|仅写|仅看)([^。；]+)/)?.[1]||null};
 }
-export function scenePhase(scene,b){const a=timeAnchors(b),d=dateParts(scene.time)[0];return /未来|设想|可能情景|计划/.test(scene.time||'')||d&&(d.year>a.currentYear||d.year===a.currentYear&&d.month>a.currentMonth)?'future':/回忆|此前|回顾/.test(scene.time||'')?'memory':'past';}
+export function futureScenario(b,a=timeAnchors(b)){const start=a.start,year=a.currentYear||Number(a.asOf?.slice(0,4)),month=a.currentMonth||Number(a.asOf?.slice(5,7));return Boolean(start&&(start.year>year||start.year===year&&start.month>month)||!start&&/未来.*(?:设想|探索|可能)|从现在起未来/.test(b.hypotheticalDirection||''));}
+export function scenePhase(scene,b){const a=timeAnchors(b),d=dateParts(scene.time)[0];if(/回忆|此前|回顾/.test(scene.time||''))return 'memory';if(!d&&futureScenario(b,a))return 'future';return /未来|设想|可能情景|计划/.test(scene.time||'')||d&&(d.year>a.currentYear||d.year===a.currentYear&&d.month>a.currentMonth)?'future':/回忆|此前|回顾/.test(scene.time||'')?'memory':'past';}
 export function temporalIssues(story,b,compiledTemporal){const a=compiledTemporal||timeAnchors(b),out=[];for(const [i,s] of (story.scenes||[]).entries()){
  const label=dateParts(s.time)[0],future=scenePhase(s,b)==='future';
  const rawMonths=a.observationRange?.match(/([0-9一二两三四五六七八九十]+)个月/)?.[1],months=rawMonths?(Number(rawMonths)||({'一':1,'二':2,'两':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'十':10}[rawMonths])):null;
  const w=a.window;out.push(...preciseWindowIssues(s,w,label,i));const outside=d=>w?.start&&w?.end&&d&&(d.year<w.start.year||d.year>w.end.year||(d.month&&w.start.month&&d.year*12+d.month<w.start.year*12+w.start.month)||(d.month&&w.end.month&&d.year*12+d.month>w.end.year*12+w.end.month));
  if(outside(label)&&! /回忆|此前|回顾/.test(s.time||''))out.push({field:'scenes.'+i,reason:'outside_observation_window'});
  if(months&&label?.month&&a.start?.month&&label.year*12+label.month>a.start.year*12+a.start.month+months&&!/回忆|此前|回顾/.test(s.time))out.push({field:'scenes.'+i,reason:'outside_explicit_month_range'});
- if(future&&!/未来|设想|可能|计划/.test(s.time||''))out.push({field:'scenes.'+i,reason:'unlabelled_future'});
+ if(future&&!futureScenario(b,a)&&!/未来|设想|可能|计划/.test(s.time||''))out.push({field:'scenes.'+i,reason:'unlabelled_future'});
  if(a.start&&label&&label.year*12+(label.month||1)<a.start.year*12+(a.start.month||1)&&! /回忆|此前|回顾/.test(s.time||''))out.push({field:'scenes.'+i,reason:'before_explicit_start'});
  for(const sentence of String((s.time||'')+'。'+(s.text||'')).split(/[。！？；\n]/)){
   if(/回忆|想起|曾经|那时|当年|此前/.test(sentence))continue;

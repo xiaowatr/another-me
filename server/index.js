@@ -20,7 +20,7 @@ const config = {...loadConfig(process.env),reviewStories:false};
 const caller = createCaller(config);
 
 const app = createExperience(config, caller, record => { try { fs.appendFileSync('.local/requests.jsonl', JSON.stringify(record) + '\n'); } catch { throw new AppError('local_storage', 500); } });
-const tasks=createStoryTasks({check:owner=>app.checkAvailable(owner),run:(input,{owner,signal,taskId,onSetting})=>withOwner(owner,()=>{const headers={};const fake={setHeader:(k,v)=>headers[k]=v,statusCode:200};const trace=makeStoryTrace(fake,taskId,{detached:true});trace.record.ownerTag=owner.slice(0,12);trace.record.taskId=taskId;return trace.run(()=>app.story(input,{signal,onSetting})).catch(e=>{fake.statusCode=e.status||500;throw e;}).finally(()=>trace.complete());})});
+const tasks=createStoryTasks({check:owner=>app.checkAvailable(owner),run:(input,{owner,signal,taskId,parentTaskId,operation,onSetting})=>withOwner(owner,()=>{const headers={};const fake={setHeader:(k,v)=>headers[k]=v,statusCode:200};const trace=makeStoryTrace(fake,taskId,{detached:true,onModelStart:()=>{operation.calls++;}});Object.assign(trace.record,{operationId:operation.id,parentTaskId,attempt:operation.attempts,rewriteCount:operation.rewrites});trace.record.ownerTag=owner.slice(0,12);trace.record.taskId=taskId;return trace.run(()=>app.story(input,{signal,onSetting})).catch(e=>{fake.statusCode=e.status||500;throw e;}).finally(()=>{trace.record.cumulativeCallCount=operation.calls;trace.complete();});})});
 const port = Number(process.env.PORT || 5173);
 const publicOrigin = process.env.APP_ORIGIN || process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
 const guard = createGuard();

@@ -97,3 +97,9 @@ cd "C:\Users\小水\Desktop\职场小水\another me"
 
 ### v41 待发布补充
 聊天改为约10—180字、1—4自然段的弹性参考，不设最低字数；假设中的半年驻留等时长接入统一观察范围。25项离线回归及构建通过；原失败正文缺失，真实生成结果未复测，无新环境变量。
+
+### v45 本地待发布：操作级重写关联
+- 前后端一起发布；未来设想统一标签及工具结构诊断、父任务重写计数已实现。模型和Prompt未改，并发设置不变。31项离线回归/构建通过，不代表真实生成已验证。
+- 无新增必填环境变量。保留 MINIMAX_MODEL=MiniMax-M3、既有服务端密钥及 MODEL_MAX_CONCURRENT；REQUEST_DIAGNOSTICS 未设置或非0时输出脱敏诊断，排查时可明确设为1。
+- 准备发布时先审核git diff/status，仅提交可发布代码，排除.env/.local/私人记录；提交并推送现有Render关联分支，使用现有自动部署或Deploy latest commit。Build仍npm ci && npm run build，Start仍npm start，Root Directory沿用当前值。不需要升级套餐。
+- 部署后检查/api/status版本2026-09-25.v45-local、Commit、maxConcurrent与模型；客户端刷新加载新资源。重启会丢失内存中未完成任务，选择无活跃任务时部署。退回本轮前的已部署Commit可恢复旧行为，但也恢复旧重写关联限制。此轮未执行发布。

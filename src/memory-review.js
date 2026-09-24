@@ -4,6 +4,7 @@ export function summarizeMemory(value){
  text=text.replace(/^(周末|平时|通常|每天|每周)我(喜欢|不喜欢|习惯)/,'我$2$1');
  if(/^(?:最近|近期)(?:在学|正在学|开始学)/.test(text))text='我'+text;
  if(/^(?:我)?(?:平时|通常|每周|周末)(?:经常|总是|会|都)(?!不会)(.+)$/.test(text))text=text.replace(/^(?:我)?(平时|通常|每周|周末)(?:经常|总是|会|都)(.+)$/,'我习惯$1$2');
+ if(/^(?:刚刚|刚|最近|近期)?(?:开始|正在|在)(?:练习|练)(?![?？])/.test(text))text='我'+text;
  if(/^(?:学习|学过|正在学)/.test(text))text='我'+text.replace(/^学习/,'正在学习');
  if(/^(?:最近|近期)?(?:开始学|学摄影|喜欢|不喜欢)/.test(text))text='我'+text.replace(/^最近学/,'最近开始学');
  text=text.replace(/^(?:现在|如今)([^，,。]{1,30})我(?:也)?喜欢了$/, '我也喜欢$1').replace(/^我(?:现在|如今)(也)?/, '我$1');
@@ -22,6 +23,7 @@ export function summarizeMemory(value){
  [/^我(?:现在|目前)?住在(.+)$/,'reality',m=>'居住地：'+m[1]],
  [/^我来自(.+)$/,'reality',m=>'来自：'+m[1]],
  [/^我(?:(?:最近|近期|刚刚|刚)?开始学(?:习)?|(?:目前|现在|正在)?在学|正在学习|最近在学)(.+)$/,'reality',m=>'正在学习：'+m[1]],
+ [/^我(?:最近|近期|刚刚|刚)?(?:开始|正在|在)(?:练习|练)(.+)$/,'reality',m=>'正在学习：'+m[1]],
  [/^我(?:学过)(.+)$/,'reality',m=>'学习经历：'+m[1]],
  [/^我(?:曾经)?做过(.+)$/,'reality',m=>'做过的事：'+m[1]],
  [/^我(?:正在|打算|计划|希望|想要|决定)(.+)$/,'preference',m=>'当前方向：'+m[1]],
@@ -41,10 +43,11 @@ export function proposeMemories(life){
  for(let i=start;i<end;i++){const m=life.messages[i];if(m.role!=='user'||m.status==='pending'||m.status==='failed')continue;
  if(m.kind==='closing')continue;
  const clauses=memoryClauses(m.text);
- for(let j=0;j<clauses.length;j++){const original=clauses[j],summary=summarizeMemory(original);if(!summary)continue;const text=summary.text;if(text.length<6||text.length>300||/[?？]|我在想|我觉得|我好像|我似乎|我在生气|我在难过|如果|假如|要是|可能|也许|假设|希望他|他说|她说|今天.*(?:难过|开心|烦|累)|现在.*(?:难过|生气|烦|累)/.test(text))continue;
+ for(let j=0;j<clauses.length;j++){const original=learningClause(clauses[j],[...candidates,...updatedCandidates,...(life.memories||[])]),summary=summarizeMemory(original);if(!summary)continue;const text=summary.text;if(text.length<6||text.length>300||/[?？]|我在想|我觉得|我好像|我似乎|我在生气|我在难过|如果|假如|要是|可能|也许|假设|希望他|他说|她说|今天.*(?:难过|开心|烦|累)|现在.*(?:难过|生气|烦|累)/.test(text))continue;
  if(!summary)continue;
  const sourceId=m.id||`${life.id}:legacy:${i}`;
- const duplicate=(meta.suppressed||[]).some(k=>(k.sourceId===sourceId||i<(k.through??meta.organizedUntil))&&sameMemory(k.text,text))||known.some(k=>sameMemory(k.text,text))||candidates.some(k=>sameMemory(k.text,text));
+ const activeKnown=text.startsWith('正在学习：')?currentLearningPool(life.memories||[],updatedCandidates,candidates):known;
+ const duplicate=(meta.suppressed||[]).some(k=>(k.sourceId===sourceId||i<(k.through??meta.organizedUntil))&&sameMemory(k.text,text))||activeKnown.some(k=>sameMemory(k.text,text))||candidates.some(k=>sameMemory(k.text,text));
  const correction=memoryCorrection(original,summary)||preferenceReversal(summary);
  const replacementEdits=[];
  if(correction){
@@ -83,6 +86,7 @@ export function completeReview(life,ids=life.candidates.filter(c=>candidateHasUs
 
 export function memoryClauses(value){
  return String(value||'').split(/(?<=[。！？；\n])/).flatMap(sentence=>{
+ if(/也没停[，,](?:我)?(?:两种|两个|两样)都(?:还)?在学/.test(sentence))return [sentence.trim()];
  if(/^(?:我)?(?:更正|其实|说错了|之前说错)|[?？]|(?:但是|不过|然而|不再|不是)/.test(sentence))return [sentence.trim()];
  const parts=sentence.split(/[，,]/);const own=/^(?:我|最近|近期|喜欢)/.test(parts[0].trim());
  return parts.map((part,i)=>{let p=part.trim();if(i&&own&&/^(?:周末|平时|通常|每天|每周|一直)?(?:喜欢|不喜欢|习惯|打算|计划)/.test(p))p='我'+p;return p.replace(/^我(周末|每天|每周)(喜欢|不喜欢)(.+)$/,'我$2$1$3');}).filter(Boolean);
@@ -111,3 +115,19 @@ function preferenceReversal(summary){const m=summary.text.match(/^(兴趣偏好|
 
 // Explicit user action rechecks old messages while preserving deletion/edit suppression.
 export function revisitMemories(life){const meta={...emptyReview(),...life.sessionMeta};return finishReview({...life,sessionMeta:{...meta,organizedUntil:0,review:null}});}
+
+// Resolve only explicit learning corrections with an identified previous learning subject.
+function learningClause(value,pool){
+ const text=String(value).trim().replace(/[。！]+$/,'');
+ if(/[?？]|吗$|呢$/.test(text))return value;
+ const correction=text.match(/^(?:我)?(?:说错了|更正一下|更正|之前说错了)[，,:：\s]*(?:我学的)?(?:是|应该是)([^，,。；]{1,30})[，,]\s*不是([^，,。；]{1,30})$/);
+ if(correction&&pool.some(m=>memoryParts(m.text).some(p=>p==='正在学习：'+correction[2])))return '我正在学习'+correction[1]+'，不是'+correction[2];
+ const continuing=text.match(/^(?:我)?([^，,。；]{1,30})也没停[，,](?:我)?(?:两种|两个|两样)都(?:还)?在学$/);
+ if(continuing)return '我正在学习'+continuing[1];
+ return value;
+}
+function currentLearningPool(saved,updated,candidates){
+ let rows=saved.map(m=>({...m}));
+ for(const c of candidates)for(const edit of c.replacementEdits||[])rows=rows.flatMap(m=>m.id!==edit.id?[m]:edit.text?[{...m,text:edit.text}]:[]);
+ return [...rows,...updated,...candidates].filter(m=>m.text);
+}
