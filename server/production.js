@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 // Deliberately do not trust caller-supplied forwarding headers. Shared proxy clients
 // share a bucket; the global bucket is the hard spending-rate ceiling for one process.
-export function createGuard({now=Date.now,modelLimit=20,apiLimit=300,peerLimit=180}={}){
+export function createGuard({now=Date.now,modelLimit=20,apiLimit=600,peerLimit=480}={}){
  const buckets=new Map();let minute=-1,total=0,models=0;
  return {accept(peer,route){const m=Math.floor(now()/60000);if(m!==minute){minute=m;total=0;models=0;buckets.clear();}
  const count=(buckets.get(peer)||0)+1;buckets.set(peer,count);total++;

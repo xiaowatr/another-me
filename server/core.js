@@ -6,6 +6,12 @@ export class AppError extends Error {
   constructor(category, status = 400, diagnostic = null) { super(category); this.category = category; this.status = status; this.diagnostic=diagnostic; }
 }
 export const errorMessages = {
+  output_limit: '这次生成用尽了输出额度，故事未完成。填写内容已保留，请稍后手动重试。',
+  capacity: '当前体验人数较多，请稍后再试。填写内容已保留。',
+  identity: '浏览器身份不可用，请允许本地保存后重试。',
+  task_missing: '未找到可恢复的任务，可能已过期或服务已重启。草稿仍保留。',
+  task_expired: '服务已重启，原任务无法恢复。草稿仍保留，请确认后重新生成。',
+  task_input_changed: '还有另一份填写内容正在生成，请先恢复或取消它。',
   input_conflict: '人物的位置还有相互矛盾的描述，请改清楚后再生成。',
   background_conflict: '这次故事有些内容与设定不一致，没能生成成功。你填写的内容还在，可以重试。',
   stopped: '本轮回复已停止，未展示内容不会进入后续对话。',
@@ -91,7 +97,9 @@ export function loadConfig(env) {
   const model = env.MINIMAX_MODEL || 'MiniMax-M3';
   const allowed = { cn: ['https://api.minimax.cn/v1','https://api.minimaxi.com/v1'], intl: ['https://api.minimax.io/v1'] };
   const valid = allowed[site]?.includes(base) && /^MiniMax-[\w.-]+$/.test(model);
-  return { key, site, base, model, mode: key ? valid ? 'real' : 'configuration' : 'demo' };
+  const storyThinking=env.MINIMAX_STORY_THINKING||'disabled';if(!['disabled','adaptive'].includes(storyThinking))throw new Error('MINIMAX_STORY_THINKING只能为disabled或adaptive');
+  const maxConcurrent=Number(env.MODEL_MAX_CONCURRENT||3);if(!Number.isInteger(maxConcurrent)||maxConcurrent<1||maxConcurrent>5)throw new Error('MODEL_MAX_CONCURRENT须为1至5的整数');
+  return { key, site, base, model, storyThinking,maxConcurrent, mode: key ? valid ? 'real' : 'configuration' : 'demo' };
 }
 
 // 仅记录预先允许的字段类型与长度，不记录模型原文或字段值。

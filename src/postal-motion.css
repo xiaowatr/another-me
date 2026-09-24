@@ -45,3 +45,17 @@
 .am-received-letter .sheet-fold{height:80px}.am-received-letter .sheet-fold-top{animation:am-unfold-top 1s both,am-fold-clear 1s both}.am-received-letter .sheet-fold-bottom{animation:am-unfold-bottom 1s both,am-fold-clear 1s both}@keyframes am-fold-clear{0%,75%{opacity:1}90%,100%{opacity:0}}@media(max-width:600px){.am-received-letter .sheet-fold{height:67px}}
 .preview-paused .opening-envelope *{animation-play-state:paused!important;animation-delay:var(--frame)!important}
 .am-received-letter{background:transparent;border-color:transparent;box-shadow:none}
+
+/* Start only once the route is visible; do not run an SVG document-time clock. */
+.am-mail-route circle{offset-path:path("M15 60 C75 -5 125 105 185 35 S250 30 285 15");offset-distance:0%;animation:am-route-travel 100s 3s cubic-bezier(.2,.5,.5,1) 1 forwards}
+@keyframes am-route-travel{0%{offset-distance:0%}25%{offset-distance:85%}60%{offset-distance:96%}100%{offset-distance:98.5%}}
+.am-sending{overflow:hidden;isolation:isolate;flex-shrink:0}.am-send-sheet{z-index:0}.am-send-pocket{z-index:1}.am-send-flap{z-index:2}
+@media(prefers-reduced-motion:reduce){.am-mail-route circle{animation:none}}
+
+/* A passive note: reserve its final height, never affect request timing. */
+.am-setting-note{box-sizing:border-box;width:min(340px,calc(100vw - 48px));padding:12px 16px;margin:2px 0 14px;border:1px solid #dcd7c7;border-radius:3px;background:#f8f4e9;box-shadow:0 2px 5px #263e3010;color:#566252;font-size:14px;line-height:1.65;white-space:pre-line;overflow:hidden;flex-shrink:0}
+.am-setting-note>span{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;overflow-wrap:anywhere}
+.am-note-unwritten{visibility:hidden}
+@media(max-height:560px){.am-setting-note{padding:6px 12px;margin-bottom:5px;font-size:12px}.am-postal-wait p{margin-top:8px}}
+
+.am-setting-note>span{-webkit-line-clamp:1;white-space:pre;display:block;text-overflow:ellipsis}

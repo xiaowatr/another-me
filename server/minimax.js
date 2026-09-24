@@ -28,12 +28,13 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       options.onStart?.(record.requestId);
       record.sent = true;trace?.modelStart(record.requestId,config.model,task);
       fs.appendFileSync(auditPath,JSON.stringify(record)+'\n');emit(record);
+      record.thinking=task==='story'?(config.storyThinking||'disabled'):'unchanged';
       record.maxCompletionTokens=task==='story'?6000:3500;
       stage('transport');
       const response = await fetchImpl(`${config.base}/chat/completions`, {
         method: 'POST', redirect: 'error',
         headers: { 'Authorization': `Bearer ${config.key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: config.model, messages, ...(task==='story'?{tools:storyTools(messages)}:{}), stream: Boolean(options.onText), ...(options.onText ? {stream_options:{include_usage:true}} : {}), reasoning_split: true, temperature: 1, max_completion_tokens: record.maxCompletionTokens }),
+        body: JSON.stringify({ model: config.model, messages, ...(task==='story'?{thinking:{type:config.storyThinking||'disabled'}}:{}), ...(task==='story'?{tools:storyTools(messages)}:{}), stream: Boolean(options.onText), ...(options.onText ? {stream_options:{include_usage:true}} : {}), reasoning_split: true, temperature: 1, max_completion_tokens: record.maxCompletionTokens }),
         signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
       });
       record.httpStatus=response.status;
@@ -70,7 +71,7 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       stage('finish');
       const choice=body.choices?.[0], calls=choice?.message?.tool_calls;
       const structured=task==='story'&&choice?.finish_reason==='tool_calls';
-      if (choice?.finish_reason !== 'stop'&&!structured) throw new AppError('invalid_response', 502,{stage:'finish',reason:body.choices?.[0]?.finish_reason==='length'?'output_limit':'not_completed'});
+      if (choice?.finish_reason !== 'stop'&&!structured) throw new AppError(choice?.finish_reason==='length'?'output_limit':'invalid_response', 502,{stage:'finish',reason:choice?.finish_reason==='length'?'output_limit':'not_completed'});
       // 不读取 reasoning_details / reasoning_content；不把原始响应或异常打印出来。
       stage('parse_and_schema');record.parsing={};
       let content=choice.message?.content;

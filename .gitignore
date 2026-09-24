@@ -14,3 +14,4 @@ tests/*
 *.jsonl
 
 !tests/iteration14.test.js
+!tests/tasks37.test.js

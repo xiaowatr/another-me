@@ -1,3 +1,4 @@
+import {currentOwner,createSlots} from './request-owner.js';
 import {activeStoryTrace,PROCESS_STARTED_AT} from './story-timing.js';
 import {rolePresentation,presentNewStory} from '../src/role-presentation.js';
 import {CODE_VERSION,diagnosticRange,takeDiagnosticCase} from './diagnostics.js';
@@ -18,34 +19,35 @@ import { storyMessages, chatMessages, streamingChatMessages, PROMPT_VERSION } fr
 import { demoStory, demoProvider } from '../src/services/demo.js';
 export function createExperience(config, caller, recordLocal = () => {}) {
   const sessions = new Map();
-  let working = false;
+  const slots=createSlots(config.maxConcurrent||3);
   async function exclusive(task, fn) {
-    const started = Date.now(); let upstreamRecorded = false; let success = false; let category = null; let acquired = false;
+    const started = Date.now(); let upstreamRecorded = false; let success = false; let category = null; let release = null;
     try {
-      if (working) throw new AppError('busy', 409);
-      working = true; acquired = true;
+      release=slots.acquire(currentOwner());
       const result = await fn(); upstreamRecorded = Boolean(result.requestId); success = true; return result;
     } catch (e) { upstreamRecorded = Boolean(e.requestId); category = e.category || 'upstream'; throw e; }
     finally {
-      if (acquired) working = false;
+      release?.();
       if (!upstreamRecorded) recordLocal({requestId: randomUUID(),time:new Date().toISOString(),task,model:config.model,promptVersion:PROMPT_VERSION,durationMs:Date.now()-started,success,errorCategory:category,inputTokens:null,outputTokens:null,totalTokens:null,sent:false,mode:config.mode});
     }
   }
-  function session(id) { const s = sessions.get(id); if (!s || Date.now() - s.updated > 2 * 60 * 60 * 1000) { sessions.delete(id); throw new AppError('session', 410); } return s; }
+  function session(id) { const s = sessions.get(id); if (!s || s.owner!==currentOwner() || Date.now() - s.updated > 2 * 60 * 60 * 1000) { if(s?.owner===currentOwner())sessions.delete(id); throw new AppError('session', 410); } return s; }
   return {
+    checkAvailable:owner=>slots.check(owner),
     restore(input){
-      if(working)throw new AppError('busy',409);
+      // Restoring one browser never blocks an unrelated browser.
+      slots.checkOwner(currentOwner());
       const data=input.snapshot;
       if(!data || !Array.isArray(data.history) || data.history.length>12 || !Array.isArray(data.memories) || data.memories.length>30)throw new AppError('input');
       const background=validateBackground(migrateBackground(data.background)),story=parseResult(JSON.stringify(data.story),'story');
       if(story.kind!=='story')throw new AppError('input');
       const history=data.history.map(m=>{if(!['user','assistant'].includes(m.role)||typeof m.content!=='string'||m.content.length>6000)throw new AppError('input');return {role:m.role,content:m.content};});
       const memories=data.memories.filter(m=>m.sourceRole!=='assistant'||m.type==='fiction').map(m=>{if(!['reality','preference','fiction'].includes(m.type)||typeof m.text!=='string'||!m.text.trim()||m.text.length>1000)throw new AppError('input');return {id:String(m.id).slice(0,80),type:m.type,text:m.text,sourceYear:Number.isInteger(m.sourceYear)?m.sourceYear:null};});
-      const id=randomUUID();if(input.previousSessionId)sessions.delete(input.previousSessionId);
+      const id=randomUUID();if(input.previousSessionId&&sessions.get(input.previousSessionId)?.owner===currentOwner())sessions.delete(input.previousSessionId);
       if(sessions.size>=20)sessions.delete(sessions.keys().next().value);
       const restoredCorrections=Array.isArray(data.corrections)?data.corrections.filter(c=>['reality','fiction'].includes(c.type)&&typeof c.text==='string'&&c.text.length<=2000).slice(-20):[];
       const roleRecords=Array.isArray(data.roleRecords)?data.roleRecords.filter(r=>['statement','plan','uncertain'].includes(r.kind)&&typeof r.text==='string'&&r.text.length<=600&&!historyRisk(r.text,background,memories)).slice(-300).map(r=>({sourceId:String(r.sourceId||'').slice(0,120),kind:r.kind,text:r.text})):[];
-      sessions.set(id,{background,story,history,memories,roleRecords,corrections:restoredCorrections,updated:Date.now()});
+      sessions.set(id,{owner:currentOwner(),background,story,history,memories,roleRecords,corrections:restoredCorrections,updated:Date.now()});
       return {sessionId:id,mode:config.mode};
     },
     seen(input) {
@@ -74,8 +76,8 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       emit({type:'done',requestId:response.requestId});
       return {requestId:response.requestId};
     }),
-    status() { return { version:CODE_VERSION,commit:/^[a-f0-9]{40}$/.test(process.env.RENDER_GIT_COMMIT||'')?process.env.RENDER_GIT_COMMIT:null,promptVersion:PROMPT_VERSION,semanticReviewEnabled:Boolean(config.reviewStories),processStartedAt:PROCESS_STARTED_AT, mode: config.mode, site: config.site, model: config.model,  }; },
-    story: (input,{signal}={}) => exclusive('story', async () => {
+    status() { return {maxConcurrent:slots.limit,activeModelTasks:slots.active,storyThinking:config.storyThinking||'disabled',storyMaxCompletionTokens:6000, version:CODE_VERSION,commit:/^[a-f0-9]{40}$/.test(process.env.RENDER_GIT_COMMIT||'')?process.env.RENDER_GIT_COMMIT:null,promptVersion:PROMPT_VERSION,semanticReviewEnabled:Boolean(config.reviewStories),processStartedAt:PROCESS_STARTED_AT, mode: config.mode, site: config.site, model: config.model,  }; },
+    story: (input,{signal,onSetting}={}) => exclusive('story', async () => {
       const diagnosticCaseId=takeDiagnosticCase(input.background||{});
       let background = validateBackground(migrateBackground(applyClarification(input.background)));
       if(diagnosticCaseId)background={...background,details:background.details.replace('[诊断:'+diagnosticCaseId+']','').trim()};
@@ -84,6 +86,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       const hard=hardConflicts(background);if(hard.length)return {kind:'clarification',hard:true,question:hard.map(h=>h.question+'（'+h.sources.join(' / ')+'）').join('；')+' 可修改原输入，或回答“现实：…”“假设：…”',mode:config.mode};
       const conflicts=inputConflicts(background);if(conflicts.length){return {kind:'clarification',hard:true,question:'想确认一下：'+conflicts.join('；')+'？',mode:config.mode};}
       const effective=compileSetting(background);effective.originalInput={...input.background};if(effective.clarifications.length){if(input.clarificationSkipped)throw new AppError('input_conflict',422);return {kind:'clarification',question:effective.clarifications.join('；'),mode:config.mode};}
+      onSetting?.(effective);
       activeStoryTrace()?.mark('input_compiled');
       const response = config.mode === 'demo' ? { result: { ...demoStory, kind: 'story', character: demoStory.intro, opening: '【固定演示开场】刚刚关了书店，你想聊些什么？' } } : await caller.call('story', storyMessages(background, input.clarification || '', !input.clarificationSkipped,effective),{signal,diagnosticCaseId,diagnosticRange:diagnosticRange(effective.temporal),diagnosticClock:{asOf:effective.temporal.asOf,startYear:effective.temporal.start?.year??null,startMonth:effective.temporal.start?.month??null},validateResult:result=>{if(result.kind==='clarification' && (background.followupKey || input.clarificationSkipped || input.clarification))throw new AppError('invalid_response',502,{stage:'business',reason:'repeated_clarification'});if(result.kind==='story'){const conflicts=settingIssues(result,effective);if(conflicts.length)throw new AppError('background_conflict',422,{stage:'business',reason:conflicts[0].reason,field:conflicts[0].field});checkStoryGrounding(result,background,effective.temporal);const review=reviewStory(result,background,[],{strictTime:true});if(review.issues.length)throw new AppError('background_conflict',422,{stage:'business',reason:review.issues[0].reasons[0],field:review.issues[0].field});}}});
       if(config.mode==='real'&&config.reviewStories&&response.result.kind==='story'){await caller.call('review',reviewMessages(effective,response.result),{signal,parentRequestId:response.requestId,validateResult:r=>validateReview(r,effective,response.result)});}
@@ -93,11 +96,11 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       if (response.result.kind === 'clarification') return { ...response.result, mode: config.mode, requestId: response.requestId };
       const id = randomUUID();
       // 成功重生成才替换旧会话，失败仍保留原故事。设置独立角色和空历史。
-      if (input.previousSessionId) sessions.delete(input.previousSessionId);
+      if (input.previousSessionId&&sessions.get(input.previousSessionId)?.owner===currentOwner()) sessions.delete(input.previousSessionId);
       for (const [key, value] of sessions) if (Date.now() - value.updated > 7200000) sessions.delete(key);
       if (sessions.size >= 20) sessions.delete(sessions.keys().next().value);
       const confirmed = {...background};
-      sessions.set(id, { background: confirmed, story: response.result, corrections: [], memories: [], history: [], updated: Date.now() });
+      sessions.set(id, { owner:currentOwner(),background: confirmed, story: response.result, corrections: [], memories: [], history: [], updated: Date.now() });
       activeStoryTrace()?.mark('session_ready');
       return { background:confirmed,effectiveSetting:effective, eraContext:selectEra(background,coordinates(background)), story: response.result, sessionId: id, mode: config.mode, requestId: response.requestId };
     }),
