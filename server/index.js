@@ -13,7 +13,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 process.chdir(root);
 const production = process.env.NODE_ENV === 'production' || process.argv.includes('--production');
 if (!production && fs.existsSync('.env')) { try { loadEnvFile('.env'); } catch { console.error('本地环境配置无法加载，请检查 .env 格式。'); process.exit(1); } }
-const config = loadConfig(process.env);
+const config = {...loadConfig(process.env),reviewStories:false};
 const caller = createCaller(config);
 
 const app = createExperience(config, caller, record => { try { fs.appendFileSync('.local/requests.jsonl', JSON.stringify(record) + '\n'); } catch { throw new AppError('local_storage', 500); } });

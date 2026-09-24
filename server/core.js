@@ -1,3 +1,4 @@
+import {strictJson,normalizeChapters} from './structured-story.js';
 import { MBTI_TYPES,activeBackground } from '../src/background.js';
 ﻿import { coordinateError,coordinates } from '../src/context.js';
 import { jsonrepair } from 'jsonrepair';
@@ -5,6 +6,7 @@ export class AppError extends Error {
   constructor(category, status = 400, diagnostic = null) { super(category); this.category = category; this.status = status; this.diagnostic=diagnostic; }
 }
 export const errorMessages = {
+  input_conflict: '人物的位置还有相互矛盾的描述，请改清楚后再生成。',
   background_conflict: '这次故事有些内容与设定不一致，没能生成成功。你填写的内容还在，可以重试。',
   stopped: '本轮回复已停止，未展示内容不会进入后续对话。',
   configuration: '服务配置有误，请检查本地密钥、国内/国际站和模型配置后重启。',
@@ -40,14 +42,17 @@ export function cleanContent(content) {
 function str(value, max) { return typeof value === 'string' && value.trim().length > 0 && value.length <= max; }
 export function parseResult(content, task, diagnostic = {}) {
   let data;
-  try { data = decodeJson(content,diagnostic); }
+  try { try{strictJson(content);}catch(e){if(e.message.startsWith('duplicate_field:'))throw new AppError('invalid_response',502,{stage:'schema',reason:'duplicate_field'});} data = decodeJson(content,diagnostic); }
   catch(e) { throw new AppError('invalid_response', 502, e.diagnostic || {stage:'parse',reason:'json_syntax'}); }
   if (!data || typeof data !== 'object' || Array.isArray(data)) throw new AppError('invalid_response', 502,{stage:'schema',reason:'object_required'});
+  if(task==='review'){if(!Array.isArray(data.checks))throw new AppError('invalid_response',502,{stage:'review',reason:'missing_review'});return data;}
   if (task === 'chat') {
     if (!str(data.reply, 2500) || !['none', 'reality', 'fiction'].includes(data.updateType)) throw new AppError('invalid_response', 502);
     return { reply: data.reply, updateType: data.updateType };
   }
   if (data.kind === 'clarification' && str(data.question, 300)) return { kind: 'clarification', question: data.question };
+  if(Object.hasOwn(data,'scene_text') && Object.hasOwn(data,'scene_3_text') && data.scene_text!==data.scene_3_text)throw new AppError('invalid_response',502,{stage:'schema',reason:'conflicting_chapter_alias'});
+  if(typeof data.scene_text==='string' && !Object.hasOwn(data,'scene_3_text') && ['scene_1_time','scene_1_title','scene_1_text','scene_2_time','scene_2_title','scene_2_text','scene_3_time','scene_3_title'].every(k=>typeof data[k]==='string')){data={...data,scene_3_text:data.scene_text};delete data.scene_text;diagnostic.chapterFieldAlias='scene_text_to_scene_3_text';}
   const flatKeys=[1,2,3].flatMap(i=>['time','title','text'].map(k=>'scene_'+i+'_'+k));
   const hasFlat=flatKeys.some(k=>Object.hasOwn(data,k));
   if(hasFlat){
@@ -59,6 +64,7 @@ export function parseResult(content, task, diagnostic = {}) {
     try{data={...data,scenes:JSON.parse(data.scenes)};diagnostic.chapterFormat='encoded_array';}catch{throw new AppError('invalid_response',502,{stage:'parse',reason:'invalid_encoded_chapters'});}
   }
 
+  if(Array.isArray(data.scenes)){try{data=normalizeChapters(JSON.stringify(data));}catch{throw new AppError('invalid_response',502,{stage:'schema',reason:'missing_or_empty_chapter'});}}
   if ((data.kind !== undefined && data.kind !== 'story') || !['title', 'identity', 'intro', 'character', 'opening'].every(k => str(data[k], 2000)) || !Array.isArray(data.scenes) || data.scenes.length !== 3 || !data.scenes.every(s => str(s.time, 60) && str(s.title, 150) && str(s.text, 2000))) throw new AppError('invalid_response', 502,{stage:'schema',reason:'story_fields'});
   return { kind: 'story', title: data.title, ...(typeof data.synopsis==='string'?{synopsis:data.synopsis.slice(0,180)}:{}), identity: data.identity, intro: data.intro, character: data.character, opening: data.opening, scenes: data.scenes.map(({ time, title, text }) => ({ time, title, text })) };
 }
@@ -81,7 +87,7 @@ export function loadConfig(env) {
   const key = (env.MINIMAX_API_KEY || '').trim();
   const site = env.MINIMAX_SITE || 'cn';
   const base = (env.MINIMAX_BASE_URL || (site === 'cn' ? 'https://api.minimax.cn/v1' : 'https://api.minimax.io/v1')).replace(/\/$/, '');
-  const model = env.MINIMAX_MODEL || 'MiniMax-M2.5';
+  const model = env.MINIMAX_MODEL || 'MiniMax-M3';
   const allowed = { cn: ['https://api.minimax.cn/v1','https://api.minimaxi.com/v1'], intl: ['https://api.minimax.io/v1'] };
   const valid = allowed[site]?.includes(base) && /^MiniMax-[\w.-]+$/.test(model);
   return { key, site, base, model, mode: key ? valid ? 'real' : 'configuration' : 'demo' };

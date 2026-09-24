@@ -1,3 +1,6 @@
+import {reviewMessages,validateReview} from './setting-review.js';
+import {compileSetting,settingIssues} from '../src/effective-setting.js';
+import {recallTarget,inputConflicts} from '../src/consistency.js';
 import {readableText,readableResult} from './readable-text.js';
 import {reviewStory,inspectFactText} from '../src/fact-frame.js';
 import {qualifyCurrentAge,historyRisk} from '../src/session-context.js';
@@ -33,11 +36,12 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       const background=validateBackground(migrateBackground(data.background)),story=parseResult(JSON.stringify(data.story),'story');
       if(story.kind!=='story')throw new AppError('input');
       const history=data.history.map(m=>{if(!['user','assistant'].includes(m.role)||typeof m.content!=='string'||m.content.length>6000)throw new AppError('input');return {role:m.role,content:m.content};});
-      const memories=data.memories.map(m=>{if(!['reality','preference','fiction'].includes(m.type)||typeof m.text!=='string'||!m.text.trim()||m.text.length>1000)throw new AppError('input');return {id:String(m.id).slice(0,80),type:m.type,text:m.text,sourceYear:Number.isInteger(m.sourceYear)?m.sourceYear:null};});
+      const memories=data.memories.filter(m=>m.sourceRole!=='assistant'||m.type==='fiction').map(m=>{if(!['reality','preference','fiction'].includes(m.type)||typeof m.text!=='string'||!m.text.trim()||m.text.length>1000)throw new AppError('input');return {id:String(m.id).slice(0,80),type:m.type,text:m.text,sourceYear:Number.isInteger(m.sourceYear)?m.sourceYear:null};});
       const id=randomUUID();if(input.previousSessionId)sessions.delete(input.previousSessionId);
       if(sessions.size>=20)sessions.delete(sessions.keys().next().value);
+      const restoredCorrections=Array.isArray(data.corrections)?data.corrections.filter(c=>['reality','fiction'].includes(c.type)&&typeof c.text==='string'&&c.text.length<=2000).slice(-20):[];
       const roleRecords=Array.isArray(data.roleRecords)?data.roleRecords.filter(r=>['statement','plan','uncertain'].includes(r.kind)&&typeof r.text==='string'&&r.text.length<=600&&!historyRisk(r.text,background,memories)).slice(-300).map(r=>({sourceId:String(r.sourceId||'').slice(0,120),kind:r.kind,text:r.text})):[];
-      sessions.set(id,{background,story,history,memories,roleRecords,corrections:[],updated:Date.now()});
+      sessions.set(id,{background,story,history,memories,roleRecords,corrections:restoredCorrections,updated:Date.now()});
       return {sessionId:id,mode:config.mode};
     },
     seen(input) {
@@ -58,7 +62,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       // Unconfirmed chat corrections remain in recent conversation; only UI-confirmed memories are pinned.
       emit({type:'start',turnId:p.id,corrections:s.corrections});
       let buffered='';
-      const forward=text=>{text=qualifyCurrentAge(readableText(text),s.background);const risks=inspectFactText(text,s.background,{memories:s.memories});if(risks.length)throw new AppError('background_conflict',422,{stage:'business',reason:risks[0]});checkChatGrounding(text,s.background,s.memories || []);p.text+=text;emit({type:'text',text});};
+      const forward=text=>{text=qualifyCurrentAge(readableText(text),s.background);const risks=inspectFactText(text,s.background,{memories:s.memories});if(risks.length)throw new AppError('background_conflict',422,{stage:'business',reason:risks[0]});checkChatGrounding(text,s.background,s.memories || [],JSON.stringify({story:s.story,roleRecords:s.roleRecords,fiction:s.memories.filter(m=>m.type==='fiction')}),recallTarget(message));p.text+=text;emit({type:'text',text});};
       const onText=text=>{buffered+=text;let match;while((match=/[。！？!?\n]/.exec(buffered))){const end=match.index+1;const sentence=buffered.slice(0,end);buffered=buffered.slice(end);forward(sentence);}};
       const response=config.mode==='demo'?{result:{reply:await demoProvider.reply({turn:s.history.length/2})}}:await caller.call('chat',streamingChatMessages(s,message,intent),{onText,validateResult:()=>{if(buffered){forward(buffered);buffered='';}},onStart:requestId=>emit({type:'request',requestId}),signal:AbortSignal.any([signal,controller.signal])});
       if(config.mode==='demo')onText(response.result.reply);
@@ -68,9 +72,13 @@ export function createExperience(config, caller, recordLocal = () => {}) {
     }),
     status() { return { mode: config.mode, site: config.site, model: config.model,  }; },
     story: (input) => exclusive('story', async () => {
-      const background = validateBackground(migrateBackground(input.background));
+      let background = validateBackground(migrateBackground(input.background));
       if (typeof (input.clarification ?? '') !== 'string' || (input.clarification || '').length > 2000) throw new AppError('input');
-      const response = config.mode === 'demo' ? { result: { ...demoStory, kind: 'story', character: demoStory.intro, opening: '【固定演示开场】刚刚关了书店，你想聊些什么？' } } : await caller.call('story', storyMessages(background, input.clarification || '', !input.clarificationSkipped),{validateResult:result=>{if(result.kind==='clarification' && (background.followupKey || input.clarificationSkipped || input.clarification))throw new AppError('invalid_response',502,{stage:'business',reason:'repeated_clarification'});if(result.kind==='story'){checkStoryGrounding(result,background);const review=reviewStory(result,background,[],{strictTime:true});if(review.issues.length)throw new AppError('background_conflict',422,{stage:'business',reason:review.issues[0].reasons[0],field:review.issues[0].field});}}});
+      if(input.clarification)background={...background,followupKey:'model',followupAnswer:input.clarification,followupSkipped:''};
+      const conflicts=inputConflicts(background);if(conflicts.length){if(input.clarificationSkipped)throw new AppError('input_conflict',422);return {kind:'clarification',question:'想确认一下：'+conflicts.join('；')+'？',mode:config.mode};}
+      const effective=compileSetting(background);if(effective.clarifications.length){if(input.clarificationSkipped)throw new AppError('input_conflict',422);return {kind:'clarification',question:effective.clarifications.join('；'),mode:config.mode};}
+      const response = config.mode === 'demo' ? { result: { ...demoStory, kind: 'story', character: demoStory.intro, opening: '【固定演示开场】刚刚关了书店，你想聊些什么？' } } : await caller.call('story', storyMessages(background, input.clarification || '', !input.clarificationSkipped,effective),{validateResult:result=>{if(result.kind==='clarification' && (background.followupKey || input.clarificationSkipped || input.clarification))throw new AppError('invalid_response',502,{stage:'business',reason:'repeated_clarification'});if(result.kind==='story'){const conflicts=settingIssues(result,effective);if(conflicts.length)throw new AppError('background_conflict',422,{stage:'business',reason:conflicts[0].reason,field:conflicts[0].field});checkStoryGrounding(result,background);const review=reviewStory(result,background,[],{strictTime:true});if(review.issues.length)throw new AppError('background_conflict',422,{stage:'business',reason:review.issues[0].reasons[0],field:review.issues[0].field});}}});
+      if(config.mode==='real'&&config.reviewStories&&response.result.kind==='story'){await caller.call('review',reviewMessages(effective,response.result),{parentRequestId:response.requestId,validateResult:r=>validateReview(r,effective,response.result)});}
       response.result=readableResult(response.result);
       if(response.result.kind==='story')response.result.openingVersion=2;
       if (response.result.kind === 'clarification') return { ...response.result, mode: config.mode, requestId: response.requestId };
@@ -79,9 +87,9 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       if (input.previousSessionId) sessions.delete(input.previousSessionId);
       for (const [key, value] of sessions) if (Date.now() - value.updated > 7200000) sessions.delete(key);
       if (sessions.size >= 20) sessions.delete(sessions.keys().next().value);
-      const confirmed = { ...background, details: background.details + (input.clarification ? '\n补充澄清：' + input.clarification : '') };
+      const confirmed = {...background};
       sessions.set(id, { background: confirmed, story: response.result, corrections: [], memories: [], history: [], updated: Date.now() });
-      return { eraContext:selectEra(background,coordinates(background)), story: response.result, sessionId: id, mode: config.mode, requestId: response.requestId };
+      return { effectiveSetting:effective, eraContext:selectEra(background,coordinates(background)), story: response.result, sessionId: id, mode: config.mode, requestId: response.requestId };
     }),
     chat: (input) => exclusive('chat', async () => {
       const s = session(input.sessionId);
@@ -94,7 +102,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       response.result.reply=qualifyCurrentAge(readableText(response.result.reply),s.background);
       const risks=inspectFactText(response.result.reply,s.background,{memories:s.memories});
       if(risks.length)throw new AppError('background_conflict',422,{stage:'business',reason:risks[0]});
-      const type = intent === 'chat' ? response.result.updateType : intent;
+      const type = intent === 'chat' ? 'none' : intent;
       if (type !== 'none') s.corrections.push({ type, text: message.trim() });
       s.history.push({ role: 'user', content: message.trim() }, { role: 'assistant', content: response.result.reply });
       s.history = s.history.slice(-12); s.updated = Date.now();

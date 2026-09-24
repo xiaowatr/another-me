@@ -18,7 +18,7 @@ export function timelineInput(b){
  const add=(text,fromEvent)=>{for(const clause of (text||'').split(/(?<=[。！？；\n])|(?=现实(?:中)?(?:后来|之后|最终))|(?=(?:这次|这条平行人生|在平行人生里))/).map(s=>s.trim()).filter(Boolean)){
   if(/^(?:而|但|不过)?现实(?:中)?(?:后来|之后|最终)|^(?:现实后续|现实里后来)/.test(clause))result.realityLater.push(clause);
   else if(/(?:如果|假如|要是|倘若|假设).{1,100}(?:可能|会|想|希望|愿意)/.test(clause))result.imagined.considerations.push(clause);
-  else if(/^(?:这次|这条平行人生|在平行人生里|希望这次|假设)/.test(clause))result.imagined.explicitPremises.push(clause);
+  else if(/^(?:这次|这条平行人生|在平行人生里|希望这次|假设|只写|仅写|只看|不设定|不要改|不改变)/.test(clause))result.imagined.explicitPremises.push(clause);
   else if(/^(?:当时)?(?:他|她|对方)(?:说|曾说|答应|承诺)/.test(clause))result.atFork.reportedSpeech.push(clause);
   else (fromEvent?result.atFork.eventAndMotivation:result.unclassifiedSupplement).push(clause);
  }};

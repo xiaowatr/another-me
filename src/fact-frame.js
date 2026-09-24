@@ -1,9 +1,10 @@
+import {replacementIssues,durationIssues,placementIssues,relevantAnswer} from './consistency.js';
 ﻿import {coordinates} from './context.js';
 const ended=/(去世|离世|过世|病故|身故|死亡|倒闭|停办|拆除)/;
 const yearOf=text=>{const m=String(text).match(/((?:19|20)\d{2})年/);return m?Number(m[1]):null;};
 export function criticalFacts(background,memories=[]){
  const c=coordinates(background),facts=new Map();
- const texts=[background.realityOutcome,background.details,...memories.filter(m=>m.type==='reality').map(m=>m.text)].filter(Boolean);
+ const texts=[background.realityOutcome,background.details,background.choiceReason,relevantAnswer(background),...memories.filter(m=>m.type==='reality').map(m=>m.text)].filter(Boolean);
  for(const text of texts)for(const clause of text.split(/[。！？；，,\n]/)){
   if(/^(?:不改变|保留|维持|不要|不能|不希望|请)/.test(clause.trim()))continue;
   if(!ended.test(clause)||/希望|假如|如果|设定|没有去世|没去世|未去世/.test(clause))continue;
@@ -19,13 +20,12 @@ export function criticalFacts(background,memories=[]){
 }
 export function inspectFactText(text,background,{frame='chat',anchorYear,memories=[]}={}){
  const c=coordinates(background),now=new Date().getFullYear(),year=anchorYear===null?null:anchorYear??(frame==='story'?c.forkYear:now),age=c.birthYear!=null&&year!=null?year-c.birthYear:null;
- const issues=[],facts=criticalFacts(background,memories);
- const source=[background.realityOutcome,background.details,...memories.filter(m=>m.type==='reality').map(m=>m.text)].join(' ');
- if(facts.events.some(f=>/去世|离世|过世|病故|身故|死亡/.test(f.event))){for(const word of ['临终','最后一程','最后一面','最后一次见面','灵堂','葬礼','抢救','病情突然恶化','病情恶化','查出来','确诊','没人告诉我'])if(String(text).includes(word)&&!source.includes(word))issues.push('unsupported_terminal_scene');}
+ const issues=[...replacementIssues(text,background),...durationIssues(text),...placementIssues(text,background)],facts=criticalFacts(background,memories);
+ const source=[background.realityOutcome,background.details,background.choiceReason,relevantAnswer(background),...memories.filter(m=>m.type==='reality').map(m=>m.text)].join(' ');
+ if(/(?:不要|不写|禁止|不得|不编造)[^。；]{0,25}(?:临终|遗言|葬礼|病情|最后一面)/.test(source)&&facts.events.some(f=>/去世|离世|过世|病故|身故|死亡/.test(f.event))){for(const word of ['临终','最后一程','最后一面','最后一次见面','灵堂','葬礼','抢救','病情突然恶化','病情恶化','查出来','确诊','没人告诉我'])if(String(text).split(/[。！？；\n]/).some(line=>line.includes(word)&&!/(?:害怕|很怕|担心|如果|假如|没有见到|并未见到|不是最后)/.test(line))&&!source.includes(word))issues.push('unsupported_terminal_scene');}
  for(const sentence of String(text||'').split(/(?<=[。！？；\n])/)){
   if(/(?:遗憾|难过|后悔)[^。！？]{0,100}(?:带着|伴着|跟着)[^。！？]{0,10}一辈子/.test(sentence))issues.push('permanent_regret_assertion');
   if(/(?:后悔|遗憾|难过)[^。！？]{0,8}(?:一辈子|永远)|(?:永远|一辈子)[^。！？]{0,8}(?:后悔|遗憾|难过)/.test(sentence)&&!/(?:不会|不必|不一定|不是)/.test(sentence))issues.push('permanent_regret_assertion');
-  if(frame==='story'&&/(?:之前|此前|分岔前)[^。！？]{0,40}(?:家里安排|父母安排|做过几份工作|借钱|家庭条件)/.test(sentence)&&!/(?:家里安排|父母安排|做过几份工作|借钱|家庭条件)/.test(source))issues.push('unsupported_prefork_background');
   const retrospective=sentence.match(/(?:上次|以前|那时|当时|那年|曾经)[^。！？]{0,24}?(\d{1,3})岁/);
   if(age!=null&&retrospective&&Number(retrospective[1])>age)issues.push('future_age_in_memory');
   const presentAge=sentence.match(/(?:我|我们)?(?:现在|今年|如今)[^。！？]{0,8}?(\d{1,3})岁/);
@@ -40,7 +40,7 @@ export function inspectFactText(text,background,{frame='chat',anchorYear,memorie
    const remembered=/(回忆|想起|那年|当年|梦里|照片里|怀念|祭|墓|遗像)/.test(sentence);
    const wish=/(希望|愿望|想以后|想明年|打算|我明年|说明年|说.*明年|如果|假如)/.test(sentence);
    const denied=/(?:没有|没再|不能|不可能|不会|不再|并未|不是|未曾)[^。！？]{0,20}(?:陪|一起|合影|拍照|过节|过中秋|工作|上课)/.test(sentence);
-   const interaction=/(陪|一起|合影|拍照|通电话|聊天|过节|过中秋|看望|见到|上班|工作|上课)/.test(sentence);
+   const interaction=/(陪|一起|合影|拍照|通电话|聊天|过节|过中秋|看望|见到|上班|工作|上课|仍然健在|仍健在|还活着)/.test(sentence);
    if(fact.year!=null&&when!=null&&(when>fact.year||(recurring&&year!=null&&year>=fact.year))&&interaction&&!remembered&&!wish&&!denied)issues.push('event_after_known_end');
   }
  }
@@ -48,8 +48,14 @@ export function inspectFactText(text,background,{frame='chat',anchorYear,memorie
 }
 export function reviewStory(story,background,memories=[],{strictTime=false}={}){
  const issues=[],trusted={intro:'',character:'',scenes:[]};const c=coordinates(background);let lastYear=c.forkYear;
- if(strictTime&&c.birthYear!=null){const age=String(story.identity||'').match(/(\d{1,3})岁/);if(age&&Math.abs(Number(age[1])-(new Date().getFullYear()-c.birthYear))>1)issues.push({field:'identity',reasons:['wrong_present_age']});}
-
+ if(strictTime&&c.birthYear!=null){
+  for(const clause of String(story.identity||'').split(/[。；，]/)){
+   const match=clause.match(/(\d{1,3})岁/);if(!match)continue;
+   const explicit=yearOf(clause),past=/那年|当时|暑假|夏天|回忆|曾经/.test(clause),present=/现在|如今|今年|此刻/.test(clause);
+   const anchor=explicit??(present?new Date().getFullYear():past?c.forkYear:new Date().getFullYear());
+   if(anchor!=null&&Math.abs(Number(match[1])-(anchor-c.birthYear))>1)issues.push({field:'identity',reasons:[present?'wrong_present_age':'age_year_conflict']});
+  }
+ }
  for(const key of ['intro','character']){const risk=inspectFactText(story[key],background,{frame:'story',anchorYear:yearOf(story[key])??lastYear,memories});if(risk.length)issues.push({field:key,reasons:risk});else trusted[key]=story[key]||'';}
  for(const [i,scene] of (story.scenes||[]).entries()){
   const explicit=yearOf(scene.time);if(explicit)lastYear=explicit;

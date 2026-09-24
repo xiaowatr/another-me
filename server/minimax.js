@@ -1,3 +1,4 @@
+import {strictJson} from './structured-story.js';
 import {storyTools} from './story-tools.js';
 import { captureUsage } from './usage.js';
 ﻿import { readSSE, textFilter } from './stream.js';
@@ -11,7 +12,7 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
   const auditPath = path.join(directory, 'requests.jsonl');
   async function call(task, messages, options = {}) {
     const started = Date.now();
-    const record = { requestId: randomUUID(), time: new Date().toISOString(), task, model: config.model, promptVersion: PROMPT_VERSION, durationMs: 0, success: false, errorCategory: null, inputTokens: null, outputTokens: null, totalTokens: null, sent: false, site:config.site, usageSource:null, cachedTokens:null, auditGroup:options.auditGroup || null, status:'pending' };
+    const record = { requestId: randomUUID(), time: new Date().toISOString(), task, model: config.model, promptVersion: PROMPT_VERSION, durationMs: 0, success: false, errorCategory: null, inputTokens: null, outputTokens: null, totalTokens: null, sent: false, site:config.site, usageSource:null, cachedTokens:null, auditGroup:options.auditGroup || null, status:'pending',parentRequestId:options.parentRequestId||null };
     try {
       if (config.mode !== 'real') throw new AppError('configuration');
       try { fs.appendFileSync(auditPath, ''); } catch { throw new AppError('local_storage',500); }
@@ -66,7 +67,7 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       if(structured){
         const allowed=storyTools(messages).map(t=>t.function.name);
         if(!Array.isArray(calls)||calls.length!==1||!allowed.includes(calls[0]?.function?.name)||typeof calls[0]?.function?.arguments!=='string')throw new AppError('invalid_response',502,{stage:'schema',reason:'invalid_story_tool'});
-        content=calls[0].function.arguments;record.storyTransport='tool_arguments';
+        content=calls[0].function.arguments;try{strictJson(content);}catch(e){throw new AppError('invalid_response',502,{stage:'schema',reason:e.message.startsWith('duplicate_field:')?'duplicate_field':'invalid_tool_json'});}record.storyTransport='tool_arguments';
       }else {if(calls?.length)throw new AppError('invalid_response',502,{stage:'finish',reason:'unexpected_tool_finish'});record.storyTransport=task==='story'?'content_json':null;}
       const result = parseResult(content, task,record.parsing);
       if(structured&&result.kind!==(calls[0].function.name==='submit_story'?'story':'clarification'))throw new AppError('invalid_response',502,{stage:'schema',reason:'tool_kind_mismatch'});
