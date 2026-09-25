@@ -17,7 +17,8 @@ import {storyWithRetry} from './story-retry.js';
 }
 const storyClient=createStoryClient(request);
 export const experience = {
-  extractMemory:input=>request('/api/memory/extract',input),
+  extractMemory:input=>request('/api/memory/extract',input,undefined,input.batchId),
+  memoryDiagnostic:input=>request('/api/memory/diagnostic',input).catch(()=>{}),
   cancelStory:()=>storyClient.cancel(),
   ackStory:id=>storyClient.ack(id),
   restore: (snapshot,previousSessionId,signal) => request('/api/session/restore',{snapshot,previousSessionId},signal),

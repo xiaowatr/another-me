@@ -1,3 +1,5 @@
+import {STORY_MAX_MODEL_CALLS} from '../src/story-budget.js';
+import {memoryClientRecord} from './memory-diagnostic.js';
 import {createMemoryTasks} from './memory-extraction.js';
 import {createStoryTasks} from './story-tasks.js';
 import {authenticate,withOwner} from './request-owner.js';
@@ -21,7 +23,7 @@ const config = {...loadConfig(process.env),reviewStories:false};
 const caller = createCaller(config);
 
 const app = createExperience(config, caller, record => { try { fs.appendFileSync('.local/requests.jsonl', JSON.stringify(record) + '\n'); } catch { throw new AppError('local_storage', 500); } });
-const tasks=createStoryTasks({check:owner=>app.checkAvailable(owner),run:(input,{owner,signal,taskId,parentTaskId,operation,onSetting})=>withOwner(owner,()=>{const headers={};const fake={setHeader:(k,v)=>headers[k]=v,statusCode:200};const trace=makeStoryTrace(fake,taskId,{detached:true,onModelStart:()=>{operation.calls++;}});Object.assign(trace.record,{operationId:operation.id,parentTaskId,attempt:operation.attempts,rewriteCount:operation.rewrites});trace.record.ownerTag=owner.slice(0,12);trace.record.taskId=taskId;return trace.run(()=>app.story(input,{signal,onSetting})).catch(e=>{fake.statusCode=e.status||500;throw e;}).finally(()=>{trace.record.cumulativeCallCount=operation.calls;trace.complete();});})});
+const tasks=createStoryTasks({check:owner=>app.checkAvailable(owner),run:(input,{owner,signal,taskId,parentTaskId,operation,onSetting})=>withOwner(owner,()=>{const headers={};const fake={setHeader:(k,v)=>headers[k]=v,statusCode:200};const trace=makeStoryTrace(fake,taskId,{detached:true,onModelStart:()=>{if(operation.calls>=STORY_MAX_MODEL_CALLS)throw new AppError('retry_exhausted',409);operation.calls++;}});Object.assign(trace.record,{operationId:operation.id,parentTaskId,attempt:operation.attempts,rewriteCount:operation.rewrites});trace.record.ownerTag=owner.slice(0,12);trace.record.taskId=taskId;return trace.run(()=>app.story(input,{signal,onSetting})).catch(e=>{fake.statusCode=e.status||500;throw e;}).finally(()=>{trace.record.cumulativeCallCount=operation.calls;trace.complete();});})});
 const memoryTasks=createMemoryTasks({instanceId:tasks.instanceId,run:(data,batchId)=>app.memory(data,batchId)});
 const port = Number(process.env.PORT || 5173);
 const publicOrigin = process.env.APP_ORIGIN || process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
@@ -55,7 +57,13 @@ const server = http.createServer(async (req, res) => {
       const input = await readBody(req);
       if (!input || typeof input !== 'object' || Array.isArray(input)) throw new AppError('input');
       if(taskMatch&&taskMatch[2])return json(res,200,tasks.cancel(owner,taskMatch[1]));
-      if(pathname==='/api/memory/extract')return json(res,200,await withOwner(owner,()=>memoryTasks.submit(owner,input)));
+      if(pathname==='/api/memory/diagnostic'){const record=memoryClientRecord(input,requestId);if(!record)throw new AppError('input');if(process.env.REQUEST_DIAGNOSTICS!=='0')console.info(JSON.stringify(record));return json(res,200,{ok:true});}
+      if(pathname==='/api/memory/extract'){
+        const log=record=>{if(process.env.REQUEST_DIAGNOSTICS!=='0')console.info(JSON.stringify({type:'memory_request_diagnostic',task:'memory',requestId,codeVersion:app.status().version,...record}));};
+        log({stage:'received',batchId:/^[a-f0-9-]{36}$/.test(input.batchId||'')?input.batchId:null});
+        try{const result=await withOwner(owner,()=>memoryTasks.submit(owner,input));log({stage:'returned',operations:result.operations.length,modelRequestId:result.requestId||null,durationMs:Date.now()-receivedAt});return json(res,200,result);}
+        catch(e){log({stage:'failed',category:e.category||'upstream',durationMs:Date.now()-receivedAt});throw e;}
+      }
       if(pathname === '/api/session/restore')return json(res,200,withOwner(owner,()=>app.restore(input)));
       if (pathname === '/api/story') return json(res,202,tasks.submit(owner,input));
       if(pathname==='/api/timing'){

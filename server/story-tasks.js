@@ -1,3 +1,4 @@
+import {STORY_MAX_REWRITES,STORY_MAX_MODEL_CALLS,retryableStoryFailure} from '../src/story-budget.js';
 import {settingNote} from '../src/setting-note.js';
 import {createHash,randomUUID} from 'node:crypto';
 import {AppError,errorMessages} from './core.js';
@@ -13,9 +14,9 @@ export function createStoryTasks({run,check=()=>{},now=Date.now,ttl=3600000,max=
   if(old){if(old.owner!==owner)throw new AppError('task_missing',404);if(old.hash!==hash)throw new AppError('task_input_changed',409);return view(old);}
   let parent=null,operation;
   if(parentTaskId){parent=own(owner,parentTaskId);if(parent.status==='running')throw new AppError('busy',409);operation=parent.operation;
-   if(operation.lastTaskId!==parentTaskId)throw new AppError('retry_exhausted',409);
+   if(operation.lastTaskId!==parentTaskId||operation.calls>=STORY_MAX_MODEL_CALLS)throw new AppError('retry_exhausted',409);
    if(continuation==='clarification'){if(parent.result?.kind!=='clarification')throw new AppError('input',422);}
-   else if(continuation==='rewrite'){if(parent.status!=='failed'||operation.rewrites>=1)throw new AppError('retry_exhausted',409);}
+   else if(continuation==='rewrite'){if(parent.status!=='failed'||operation.rewrites>=STORY_MAX_REWRITES||!retryableStoryFailure({...parent.error,terminal:true}))throw new AppError('retry_exhausted',409);}
    else throw new AppError('input',422);
   }else operation={id:taskId,lastTaskId:taskId,rewrites:0,attempts:0,calls:0};
   check(owner);if(records.size>=max)throw new AppError('capacity',429);

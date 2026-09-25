@@ -26,3 +26,11 @@ tests/*
 !tests/targeted53.test.js
 
 !tests/targeted54.test.js
+
+!tests/chapters55.test.js
+
+!tests/mobile56.test.js
+!tests/pipa56.test.js
+
+!tests/closeout57.test.js
+!tests/mobile42.test.js

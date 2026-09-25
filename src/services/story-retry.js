@@ -1,8 +1,10 @@
-﻿// Retry only a completed, explicitly rejected model result. Never retry an ambiguous connection failure.
+﻿import {STORY_MAX_REWRITES,retryableStoryFailure} from '../story-budget.js';
+// Reconnect to an ambiguous request instead of starting a second paid request.
 export async function storyWithRetry(attempt,{signal,onRetry=()=>{},onFailedAttempt=()=>{}}={}){
- try{return await attempt(0);}catch(error){
-  if(signal?.aborted||error.rewriteCount>=1||!(['invalid_response','background_conflict'].includes(error.category)||(error.terminal&&['upstream','timeout'].includes(error.category))))throw error;
-  onFailedAttempt(error);onRetry();signal?.throwIfAborted();
-  return await attempt(1);
+ for(let i=0;i<=STORY_MAX_REWRITES;i++){
+  try{return await attempt(i);}catch(error){
+   if(signal?.aborted||i===STORY_MAX_REWRITES||error.rewriteCount>=STORY_MAX_REWRITES||!retryableStoryFailure(error))throw error;
+   onFailedAttempt(error);onRetry(i+1);signal?.throwIfAborted();
+  }
  }
 }

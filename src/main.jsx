@@ -31,7 +31,7 @@ import { experience, streamReply, confirmSeen } from './services';
 import './style.css';
 import {coordinates,coordinateError} from './context';
 import {readLives,writeLives,modelHistory,removeLifeBackup} from './life-store';
-import {composerAction} from './composer';
+import {composerAction,resizeComposer} from './composer';
 import MemoryPanel from './MemoryPanel';
 import { takeMessage, messageDelay, appendBubble } from './chat-stream';
 import { readDraft, writeDraft, clearDraft, EMPTY_BACKGROUND } from './draft';
@@ -107,14 +107,16 @@ function App() {
   function returnLives(){setEditingProfile(false);setAboutOpen(false);setPage('lives');}
   async function newLife(){if(generation.current){generation.current.abort();generation.current=null;}if(pendingStory()){try{await experience.cancelStory();}catch(e){setError(e.message);return;}}resetStoryOperation();setFailureId('');setFollowupOpen(false);setShowAgeErrors(false);setStoryRetrying(false);setStoryRecovering(false);setWaitingNote([]);setBusy(false);requestLock.current=false;setBackground(b=>({...b,clarificationAppliedAnswer:'',followupKey:'',followupQuestion:'',followupAnswer:'',followupSkipped:''}));setFormOrigin('lives');setError('');setGenerationFailed(false);setSyncFailed(false);setClearedDraft(null);setTiming(null);setDetailsOpen(false);setSavedNotice('');setEditingProfile(false);setQuestion('');setClarification('');setPage('input');}
   function deleteLife(id){if(requestLock.current)return;reviewJobs.current.delete(id);const all=libraryRef.current.filter(l=>l.id!==id);libraryRef.current=all;setLibrary(all);if(lifeId===id){live.current=null;setLifeId(null);setStory(null);setMessages([]);setCandidates([]);setMemories([]);setSessionMeta(emptyReview());}const okay=writeLives(draftStorage(),{activeId:lifeId===id?null:lifeId,lives:all});setLifeStorageOkay(okay&&removeLifeBackup(draftStorage(),id));setPage('lives');}
-  async function endChat(){const id=lifeId;if(reviewJobs.current.has(id))return;reviewJobs.current.add(id);setWrapWorkingId(id);setAboutOpen(false);const t=activeTurn.current;
+  async function endChat(){const id=lifeId;if(reviewJobs.current.has(id))return;reviewJobs.current.add(id);experience.memoryDiagnostic({stage:'end_clicked',totalMessages:live.current?.messages.length||0});setWrapWorkingId(id);setAboutOpen(false);const t=activeTurn.current;
     try{
       if(t){await stopReply();await t.finished;await new Promise(resolve=>setTimeout(resolve,0));}
       const saved=mutateLife(id,l=>page==='chat'?closeConversation(l):l);
       if(!saved?.okay)return;
       returnLives();setSavedNotice('聊天已保存，正在整理记忆…');
+      experience.memoryDiagnostic({stage:'saved'});
       const data=memoryInput(saved.next);
-      if(!data.messages.length){setSavedNotice('聊天已保存，下次接着聊');return;}
+      experience.memoryDiagnostic({stage:'batch_ready',totalMessages:saved.next.messages.length,eligibleMessages:data.messages.length,start:data.start,end:data.end});
+      if(!data.messages.length){experience.memoryDiagnostic({stage:data.blocked?'pending_message':'no_new_messages'});setSavedNotice(data.blocked?'聊天已保存，还有消息未完成，记忆整理未完成。':'聊天已保存，下次接着聊');return;}
       const old=saved.next.sessionMeta?.memoryJob;
       let job=old&&old.status!=='complete'&&JSON.stringify(old.input.messages.map(m=>m.id))===JSON.stringify(data.messages.map(m=>m.id))?old:null;
       if(!job){
@@ -126,11 +128,13 @@ function App() {
         const unchanged=JSON.stringify(job.input.memories)===JSON.stringify(memoryInput(saved.next).memories);
         if(unchanged){const ready=mutateLife(id,l=>{job={...job,expectedRevision:(l.memoryRevision||0)+1};return {...l,sessionMeta:{...l.sessionMeta,memoryJob:job}};});if(!ready?.okay)return;}
       }
+      experience.memoryDiagnostic({stage:'request_sent',batchId:job.id});
       const result=await experience.extractMemory({batchId:job.id,instanceId:job.instanceId,data:job.input});
       const done=mutateLife(id,l=>acceptMemoryResult(l,job,result));
+      experience.memoryDiagnostic({stage:done?.okay?'persisted':'failed',batchId:job.id,modelRequestId:result.requestId,operations:result.operations.length});
       if(done?.okay)setSavedNotice(done.next.sessionMeta.memoryOutcome==='confirmation'?'聊天已保存，有记忆更新需要确认。':done.next.sessionMeta.memoryOutcome==='changed'?'聊天已保存，记忆已更新。':'聊天已保存，记忆没有变化。');
       else setSavedNotice('聊天已保存，记忆整理未完成。请保留页面，稍后恢复整理结果。');
-    }catch(e){mutateLife(id,l=>({...l,sessionMeta:{...l.sessionMeta,memoryJob:l.sessionMeta?.memoryJob?{...l.sessionMeta.memoryJob,status:'failed',requestId:e.requestId||l.sessionMeta.memoryJob.requestId,error:e.category||'memory_processing'}:null,review:{...l.sessionMeta?.review,status:'failed'}}}));setSavedNotice('聊天已保存，记忆整理未完成。可在资料与记忆中恢复整理结果。');}
+    }catch(e){experience.memoryDiagnostic({stage:'failed',modelRequestId:e.requestId});mutateLife(id,l=>({...l,sessionMeta:{...l.sessionMeta,memoryJob:l.sessionMeta?.memoryJob?{...l.sessionMeta.memoryJob,status:'failed',requestId:e.requestId||l.sessionMeta.memoryJob.requestId,error:e.category||'memory_processing'}:null,review:{...l.sessionMeta?.review,status:'failed'}}}));setSavedNotice('聊天已保存，记忆整理未完成。可在资料与记忆中恢复整理结果。');}
     finally{reviewJobs.current.delete(id);setWrapWorkingId(null);}
   }
   function saveSelected(ids){try{mutateLife(lifeId,l=>completeReview(l,ids));returnLives();}catch{setError('记忆已满，请先在关于我中整理已有内容。');}}
@@ -170,10 +174,10 @@ function App() {
     window.addEventListener('focus', refresh);
     return () => window.removeEventListener('focus', refresh);
   }, []);
-  useEffect(() => { window.scrollTo(0, 0); heading.current?.focus(); }, [page, step]);
+  useEffect(() => { window.scrollTo(0, 0); heading.current?.focus({preventScroll:true}); }, [page, step]);
   useEffect(() => { if (page === 'chat' && messages.length && followBottom.current) messagesBox.current && (messagesBox.current.scrollTop=messagesBox.current.scrollHeight); }, [messages]);
   useLayoutEffect(()=>{if(page==='chat'&&messagesBox.current)messagesBox.current.scrollTop=chatPositions.current.get(lifeId)??messagesBox.current.scrollHeight;},[page,lifeId]);
-  useLayoutEffect(()=>{const el=composer.current;if(!el)return;el.style.height='0px';const h=Math.min(136,Math.max(40,el.scrollHeight));el.style.height=h+'px';el.style.overflowY=el.scrollHeight>136?'auto':'hidden';},[draft,page]);
+  useLayoutEffect(()=>{resizeComposer(composer.current);},[draft,page]);
   useEffect(()=>{if(page==='chat')return watchChatViewport(window,document.documentElement,()=>{if(followBottom.current&&messagesBox.current)messagesBox.current.scrollTop=messagesBox.current.scrollHeight;});},[page]);
   function cancelGeneration(){experience.cancelStory().catch(e=>setError(e.message));setStorageOkay(writeDraft(draftStorage(),{background,step,detailsOpen,question,clarification}));if(generation.current){generation.current.abort();generation.current=null;requestLock.current=false;setBusy(false);}}
   const navigate = (next) => { if(generation.current)cancelGeneration();else if(requestLock.current)return;if(page==='chat'&&messagesBox.current)chatPositions.current.set(lifeId,messagesBox.current.scrollTop);if(next==='input'&&page!=='input')setFormOrigin(page);if(next!=='input')setEditingProfile(false); setError(''); if(next==='input' && page==='life')setBackground(migrateBackground({...empty,...generatedBackground})); setPage(next); };

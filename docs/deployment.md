@@ -130,3 +130,13 @@ cd "C:\Users\小水\Desktop\职场小水\another me"
 ### v54 日期作用域与记忆主体（未发布）
 前后端需同批发布；基线94a49cd，代码版本2026-09-25.v54-local，故事Prompt仍v27，记忆Prompt为memory-v3。M3/disabled/2000记忆配置、故事参数和并发上限不变，无新增必填环境变量。37项定向回归及构建通过，不代表真实生成或手机验收通过。
 审核git diff/status后只提交公开代码、合成测试和部署说明，排除.env、.local、私人台账及无关目录；推送原main后在Render部署最新Commit。沿用Build `npm ci && npm run build`、Start `npm start`。核对/api/status版本和Commit，刷新前端即可，不清空浏览器数据。任务仍不能跨服务重启恢复，空闲时部署。回退可选基线94a49cd，但会恢复此前缺陷。本轮未执行提交/推送/部署。
+
+### v55 完整四章兼容（未发布）
+允许3—4章，默认生成三章，错误分类区分数量和正文缺失；存储恢复与聊天事实保留第四章。18项定向模拟/生产回归及构建通过，无真实模型调用，无并发调整或新增环境变量。代码版本2026-09-25.v55-local，原基线94a49cd。前后端同批提交部署，沿用npm ci && npm run build、npm start；部署后核对/api/status版本。旧存档无需清空。本轮未推送发布。
+
+### v56 手机输入风险修复（未发布）
+代码版本2026-09-25.v56-local；输入测量不再压缩聚焦中的输入框，补外层滚动锁恢复。模拟手机尺寸通过，不等于真机键盘已验证。记忆模型与并发参数不变；琵琶事实模拟保存通过，线上实际漏记原因尚不明。构建通过，无新增环境变量。沿用现有发布步骤，不清空浏览器存档。
+
+### v57 记忆诊断和三次尝试（未发布）
+前后端一起部署，版本2026-09-25.v57-local；新增src/story-budget.js、server/memory-diagnostic.js和定向测试随已审核代码发布。无需新增密钥/模型/并发配置。REQUEST_DIAGNOSTICS=1可明确开启脱敏日志（默认非0也输出），检查memory_client_diagnostic及memory_request_diagnostic、model_diagnostic task=memory；只看故事请求ID不能证明记忆未调用。最多两次自动重写、同操作总模型调用最多三次，最坏等待及费用相应增加；断线恢复原任务、output_limit等不自动重试。
+40项定向回归、构建和隔离浏览器模拟保存刷新通过，未进行付费或手机真机验证。沿用Build npm ci && npm run build、Start npm start，审核后推送原main，再Render部署最新Commit，核对/api/status；本轮未提交推送部署，存档不清空。

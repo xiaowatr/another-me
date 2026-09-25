@@ -86,7 +86,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       let background = validateBackground(migrateBackground(applyClarification(input.background)),{newSubmission:true});
       if(diagnosticCaseId)background={...background,details:background.details.replace('[诊断:'+diagnosticCaseId+']','').trim()};
       if (typeof (input.clarification ?? '') !== 'string' || (input.clarification || '').length > 2000) throw new AppError('input');
-      if(input.clarification)background={...background,followupKey:'model',followupAnswer:input.clarification,followupSkipped:''};
+      if(input.clarification)background=validateBackground(migrateBackground(applyClarification({...background,followupKey:hardConflicts(background).length?'hard-conflict':background.followupKey||'model',followupAnswer:input.clarification,followupSkipped:''})),{newSubmission:true});
       const hard=hardConflicts(background);if(hard.length)return {kind:'clarification',hard:true,question:hard.map(h=>h.question+'（'+h.sources.join(' / ')+'）').join('；')+' 可修改原输入，或回答“现实：…”“假设：…”',mode:config.mode};
       const conflicts=inputConflicts(background);if(conflicts.length){return {kind:'clarification',hard:true,question:'想确认一下：'+conflicts.join('；')+'？',mode:config.mode};}
       const effective=compileSetting(background);effective.originalInput={...input.background};if(effective.clarifications.length){if(input.clarificationSkipped)throw new AppError('input_conflict',422);return {kind:'clarification',question:effective.clarifications.join('；'),mode:config.mode};}

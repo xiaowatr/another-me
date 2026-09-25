@@ -95,7 +95,7 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       const safeError = options.signal?.aborted ? new AppError('stopped') : error instanceof AppError ? error : new AppError(error.name === 'TimeoutError' || error.name === 'AbortError' ? 'timeout' : 'network', 502);
       record.failureStage=safeError.diagnostic?.stage || record.stage || 'local';
       record.failureReason=safeError.diagnostic?.reason || safeError.category;
-      const field=safeError.diagnostic?.field;if(typeof field==='string' && /^(title|identity|intro|character|opening|scenes\.[0-2](?:\.(time|title|text))?)$/.test(field))record.failureField=field;
+      const field=safeError.diagnostic?.field;if(typeof field==='string' && /^(title|identity|intro|character|opening|scenes\.[0-3](?:\.(time|title|text))?)$/.test(field))record.failureField=field;
       if(scoped&&safeError.diagnostic?.evidence){const e=safeError.diagnostic.evidence;log(JSON.stringify({type:'scoped_temporal_evidence',requestId:record.requestId,caseId:options.diagnosticCaseId,field:record.failureField,reason:record.failureReason,chapterTime:redactEvidence(String(e.chapterTime||''),config.key).slice(0,120),bodyDate:e.bodyDate,scope:e.scope,rule:e.rule,clause:redactEvidence(String(e.clause||''),config.key).slice(0,240)}));}
       record.errorCategory = safeError.category; safeError.requestId = record.requestId; throw safeError;
     } finally {

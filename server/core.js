@@ -26,7 +26,7 @@ export const errorMessages = {
   content: '本次内容无法由模型处理，请调整输入后重试。',
   input: '请检查输入内容；必填内容不能为空，且不能超过长度限制。',
   session: '当前故事会话已失效，请返回重新生成。',
-  retry_exhausted: '这次已自动重写过一次，仍未完成。填写内容已保留，请稍后再试。',
+  retry_exhausted: '这次生成已达到最多三次尝试，仍未完成。填写内容已保留。',
   busy: '已有请求处理中，请等待完成。',
   memory_full: '本轮已保存较多纠正信息。请将最新信息整理到背景中，重新生成一个故事。',
   local_storage: '本地请求记录无法写入，已停止调用。请检查项目文件夹权限。',
@@ -62,19 +62,26 @@ export function parseResult(content, task, diagnostic = {}) {
   if (data.kind === 'clarification' && str(data.question, 300)) return { kind: 'clarification', question: data.question };
   if(Object.hasOwn(data,'scene_text') && Object.hasOwn(data,'scene_3_text') && data.scene_text!==data.scene_3_text)throw new AppError('invalid_response',502,{stage:'schema',reason:'conflicting_chapter_alias'});
   if(typeof data.scene_text==='string' && !Object.hasOwn(data,'scene_3_text') && ['scene_1_time','scene_1_title','scene_1_text','scene_2_time','scene_2_title','scene_2_text','scene_3_time','scene_3_title'].every(k=>typeof data[k]==='string')){data={...data,scene_3_text:data.scene_text};delete data.scene_text;diagnostic.chapterFieldAlias='scene_text_to_scene_3_text';}
-  const flatKeys=[1,2,3].flatMap(i=>['time','title','text'].map(k=>'scene_'+i+'_'+k));
+  const flatNumbers=Object.keys(data).flatMap(k=>/^scene_(\d+)_(?:time|title|text)$/.test(k)?[Number(k.match(/^scene_(\d+)_/)[1])]:[]);
+  if(flatNumbers.some(n=>n<1||n>4))throw new AppError('invalid_response',502,{stage:'schema',reason:'chapter_count'});
+  const chapterIndices=flatNumbers.includes(4)?[1,2,3,4]:[1,2,3];
+  const flatKeys=chapterIndices.flatMap(i=>['time','title','text'].map(k=>'scene_'+i+'_'+k));
   const hasFlat=flatKeys.some(k=>Object.hasOwn(data,k));
   if(hasFlat){
     if(Object.hasOwn(data,'scenes')||!flatKeys.every(k=>Object.hasOwn(data,k)))throw new AppError('invalid_response',502,{stage:'schema',reason:'ambiguous_or_missing_chapters'});
-    data={...data,scenes:[1,2,3].map(i=>Object.fromEntries(['time','title','text'].map(k=>[k,data['scene_'+i+'_'+k]])))};
+    data={...data,scenes:chapterIndices.map(i=>Object.fromEntries(['time','title','text'].map(k=>[k,data['scene_'+i+'_'+k]])))};
     diagnostic.chapterFormat='flat_fields';
   }else if(typeof data.scenes==='string'){
     if(data.scenes.length>20000)throw new AppError('invalid_response',502,{stage:'schema',reason:'chapter_size'});
     try{data={...data,scenes:JSON.parse(data.scenes)};diagnostic.chapterFormat='encoded_array';}catch{throw new AppError('invalid_response',502,{stage:'parse',reason:'invalid_encoded_chapters'});}
   }
 
-  if(Array.isArray(data.scenes)){try{data=normalizeChapters(JSON.stringify(data));}catch{throw new AppError('invalid_response',502,{stage:'schema',reason:'missing_or_empty_chapter'});}}
-  if ((data.kind !== undefined && data.kind !== 'story') || !['title', 'identity', 'intro', 'character', 'opening'].every(k => str(data[k], 2000)) || !Array.isArray(data.scenes) || data.scenes.length !== 3 || !data.scenes.every(s => str(s.time, 60) && str(s.title, 150) && str(s.text, 2000))) throw new AppError('invalid_response', 502,{stage:'schema',reason:'story_fields'});
+  try{data=normalizeChapters(JSON.stringify(data));}catch(e){
+    const [code,index]=e.message.split(':');
+    const reason=code==='missing_or_empty_body'?'missing_or_empty_chapter':code==='body_too_long'?'chapter_body_too_long':code;
+    throw new AppError('invalid_response',502,{stage:'schema',reason,...(index!==undefined?{field:'scenes.'+index}:{}),...(code==='chapter_count'?{actualCount:data.scenes.length,minCount:3,maxCount:4}:{})});
+  }
+  if ((data.kind !== undefined && data.kind !== 'story') || !['title', 'identity', 'intro', 'character', 'opening'].every(k => str(data[k], 2000)) || !Array.isArray(data.scenes) || (data.scenes.length < 3 || data.scenes.length > 4) || !data.scenes.every(s => str(s.time, 60) && str(s.title, 150) && str(s.text, 2000))) throw new AppError('invalid_response', 502,{stage:'schema',reason:'story_fields'});
   return { kind: 'story', title: data.title, ...(typeof data.synopsis==='string'?{synopsis:data.synopsis.slice(0,180)}:{}), identity: data.identity, intro: data.intro, character: data.character, opening: data.opening, scenes: data.scenes.map(({ time, title, text }) => ({ time, title, text })) };
 }
 export function validateBackground(b,{newSubmission=false}={}) {
