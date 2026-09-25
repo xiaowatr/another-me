@@ -40,3 +40,7 @@ tests/*
 !tests/task59.test.js
 
 !tests/memory60.test.js
+
+!tests/identity61.test.js
+
+!tests/mobile62.test.js

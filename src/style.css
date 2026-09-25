@@ -85,7 +85,7 @@
 .app-shell.in-chat .app-fieldset{display:flex;flex-direction:column;border:0;padding:0;margin:0;width:100%;height:100%;min-height:0;min-width:0}
 .app-shell.in-chat main{display:flex;flex-direction:column;flex:1;height:100%;min-height:0;padding:0;margin:0;overflow:hidden}
 .app-shell.in-chat .lives-entry{flex:none;align-self:flex-start;margin:4px 0;padding:5px 12px;min-height:32px;font-size:12px}
-.app-shell.in-chat .chat-page{display:flex;flex-direction:column;flex:1;height:auto;min-height:0;width:100%;margin:0;padding:0 0 max(6px,env(safe-area-inset-bottom))}
+.app-shell.in-chat .chat-page{display:flex;flex-direction:column;flex:1;height:auto;min-height:0;width:100%;margin:0;padding:0 0 max(6px,var(--chat-bottom-inset,env(safe-area-inset-bottom,0px)))}
 .app-shell.in-chat .chat-title{flex:none;gap:6px;margin:0 0 3px}.app-shell.in-chat .chat-title h1{font-size:14px}.app-shell.in-chat .chat-title p{font-size:10px;margin:0}.app-shell.in-chat .avatar{display:none}.app-shell.in-chat .chat-nav{gap:5px}.app-shell.in-chat .chat-nav .text-button{font-size:11px;padding:5px 9px;min-height:32px}.app-shell.in-chat .chat-nav button:first-child{display:none}
 .app-shell.in-chat .messages{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:6px 0;margin:0}.app-shell.in-chat .message{max-width:90%;flex-shrink:0}
 .app-shell.in-chat .closing-row{flex:none;margin:0;padding:3px 0}.app-shell.in-chat .closing-button{padding:5px 12px;min-height:32px;font-size:12px}.app-shell.in-chat .composer{flex:none;margin:0;padding:3px 0 0;align-items:flex-end}.app-shell.in-chat .composer .primary{padding:8px 14px;min-height:40px}.app-shell.in-chat .chat-page>.small{display:none}

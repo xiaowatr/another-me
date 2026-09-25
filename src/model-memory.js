@@ -1,3 +1,4 @@
+import {isIdentityCorrection} from './participant-identity.js';
 import {applyMemoryOperations} from './memory-operations.js';
 import {reviseMemories} from './memory-review.js';
 export function memoryInput(life){
@@ -7,7 +8,7 @@ export function memoryInput(life){
  const eligible=m=>m.role==='user'&&m.kind!=='closing'&&m.status!=='pending';
  const messages=life.messages.slice(start,end).flatMap((m,i)=>eligible(m)?[user(m,start+i)]:[]);
  if(messages.length>80||messages.some(m=>m.text.length>2500))throw Error('memory_input_limit');
- return {lifeId:life.id,start,end,blocked:blocked>=0,messages,context:life.messages.slice(0,start).flatMap((m,i)=>eligible(m)?[user(m,i)]:[]).slice(-12),memories:life.memories.filter(m=>m.type!=='fiction').map(({id,text,type})=>({id,text,type}))};
+ return {identityContext:{realityOutcome:(life.background?.realityOutcome||'').slice(0,2500),hypotheticalDirection:(life.background?.hypotheticalDirection||'').slice(0,2500),corrections:life.messages.slice(0,end).filter(m=>eligible(m)&&isIdentityCorrection(m.text)).slice(-20).map(m=>m.text.slice(0,2000))},lifeId:life.id,start,end,blocked:blocked>=0,messages,context:life.messages.slice(0,start).flatMap((m,i)=>eligible(m)?[user(m,i)]:[]).slice(-12),memories:life.memories.filter(m=>m.type!=='fiction').map(({id,text,type})=>({id,text,type}))};
 }
 export function acceptMemoryResult(life,job,result){
  if(life.sessionMeta?.memoryJob?.id!==job.id||life.memoryRevision!==job.expectedRevision)throw Error('memory_stale_revision');

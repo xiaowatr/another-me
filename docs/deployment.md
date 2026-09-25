@@ -153,3 +153,13 @@ src/chat-viewport.js以真实容器位置做增量校正，补文档滚动和输
 手机聊天改绝对文档坐标，移除双重fixed与矩形反馈。54项定向模拟检查及隔离实际页面确认保存/刷新通过；Safari真机、真实模型和线上效果未验证。无需新变量，MiniMax-M3、故事disabled/6000、记忆disabled/2000保持。
 审核git diff/status，只提交本轮公开src/server、合成测试、.gitignore和本说明，不含私密台账/.local/.env/无关目录；原有未跟踪文件单独审核。用户决定发布后再提交、推送现有Render关联main，在现有服务Deploy latest commit（或等待已配置的自动部署）；Build/Start沿用现有配置。空闲时发布，核对/api/status版本及Commit，并核对浏览器加载的新构建资源；后端版本不能单独证明前端已更新。不清空浏览器数据，本轮没有执行发布。
 本轮最终构建资源：index-DqiLMM1z.js、index-BbjoQ1pJ.css；部署后可用作前端资源核对，后续重新构建可能改变哈希。
+
+
+### v61 人物归属统一（本地未发布）
+新增src/participant-identity.js，故事开场、聊天及记忆共用三方身份定义；身份纠正持续保留，有界开场称呼保护，错误记忆归属支持沿原来源/目标/版本校验撤销。前后端一起发布，版本2026-09-25.v61-local，Prompt v28，memory-v5；MiniMax-M3及故事disabled/6000、记忆disabled/2000不变，无新环境变量。未改变页面、生成重试或保存流程。
+11项针对性离线检查通过，构建index-CmBHwzHZ.js / index-BbjoQ1pJ.css；真实模型与线上实测未验证。本轮未提交/推送/部署。发布仍由用户决定，审核公开代码及合成tests/identity61.test.js后沿用现有Render关联分支与Build/Start，核对后端版本和前端资源；排除私密台账/.local/.env/无关目录，不清空旧存档。
+
+
+### v62 Safari 输入位置（本地未发布）
+有效visualViewport.height直接决定聊天高度；软键盘展开时取消额外安全区，其他状态保留原安全区，无固定百分比或浏览器UA偏移。版本2026-09-25.v62-local，保留v61人物归属及Prompt v28/memory-v5，模型预算不变。
+7项定向检查、生产构建和隔离真实CSS模拟通过，未Safari/微信真机复测。最终资源index-Dd1a-54E.js / index-CWJawJPa.css。未提交/推送/部署；用户发起发布后审核v61/v62公开代码、合成测试及本说明，沿原关联分支和现有Render Build/Start部署，核对后端版本和前端资源，原Safari与微信对照验收。不清空数据，不提交私密台账或临时夹具。

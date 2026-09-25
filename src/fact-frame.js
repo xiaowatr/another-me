@@ -1,3 +1,4 @@
+import {safeOpeningAddress} from './participant-identity.js';
 import {storyClock,beyondStoryEnd} from './story-clock.js';
 import {scenePhase} from './input-anchors.js';
 import {replacementIssues,durationIssues,placementIssues,relevantAnswer} from './consistency.js';
@@ -75,7 +76,7 @@ export function reviewStory(story,background,memories=[],{strictTime=false}={}){
 }
 export function currentOpening(story,background){
  const end=storyClock(background,story);if(beyondStoryEnd(story.opening||'',end)&&!/如果|计划|打算|希望/.test(story.opening||''))return '我在这里。刚说完这段日子，你想从哪件事聊起？';
- if(story.openingVersion===2 && story.opening?.trim() && !inspectFactText(story.opening,background).length)return story.opening;
+ if(story.openingVersion===2 && story.opening?.trim() && !inspectFactText(story.opening,background).length)return safeOpeningAddress(story.opening,background);
  const year=coordinates(background).forkYear;
  // A clearly current and consistent opening can be reused verbatim. Old openings stay in the story view.
  if(/现在|如今|此刻/.test(story.opening||'')&&!inspectFactText(story.opening,background).length&&!/今年暑假|今年夏天/.test(story.opening))return story.opening;
