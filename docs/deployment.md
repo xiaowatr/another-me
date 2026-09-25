@@ -140,3 +140,9 @@ cd "C:\Users\小水\Desktop\职场小水\another me"
 ### v57 记忆诊断和三次尝试（未发布）
 前后端一起部署，版本2026-09-25.v57-local；新增src/story-budget.js、server/memory-diagnostic.js和定向测试随已审核代码发布。无需新增密钥/模型/并发配置。REQUEST_DIAGNOSTICS=1可明确开启脱敏日志（默认非0也输出），检查memory_client_diagnostic及memory_request_diagnostic、model_diagnostic task=memory；只看故事请求ID不能证明记忆未调用。最多两次自动重写、同操作总模型调用最多三次，最坏等待及费用相应增加；断线恢复原任务、output_limit等不自动重试。
 40项定向回归、构建和隔离浏览器模拟保存刷新通过，未进行付费或手机真机验证。沿用Build npm ci && npm run build、Start npm start，审核后推送原main，再Render部署最新Commit，核对/api/status；本轮未提交推送部署，存档不清空。
+
+### v58 Safari 聊天定位（未发布）
+src/chat-viewport.js以真实容器位置做增量校正，补文档滚动和输入框尺寸观察。9项定向回归、手机尺寸模拟与构建通过，未做Safari真机验收。代码版本v58-local，无新环境变量、无模型调用，原部署命令不变。需部署并核对版本后才能验收手机效果，不清空浏览器存档。
+
+### v59 任务失效恢复（未发布）
+前端记录服务实例，明确提交拒绝后解除无效任务关联；模糊查询失败不自动创建新付费任务。19项模拟与构建通过，无新变量，保留数据。代码版本2026-09-25.v59-local；原Build/Start与发布方式不变，本轮未推送。现实记忆跨故事共享未实施。

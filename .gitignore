@@ -34,3 +34,7 @@ tests/*
 
 !tests/closeout57.test.js
 !tests/mobile42.test.js
+
+!tests/mobile58.test.js
+
+!tests/task59.test.js
