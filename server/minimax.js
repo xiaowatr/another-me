@@ -1,4 +1,5 @@
 import {activeStoryTrace} from './story-timing.js';
+import {MEMORY_PROMPT_VERSION} from './memory-extraction.js';
 import {CODE_VERSION,redactEvidence} from './diagnostics.js';
 import {strictJson} from './structured-story.js';
 import {storyTools} from './story-tools.js';
@@ -16,7 +17,7 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
   const auditPath = path.join(directory, 'requests.jsonl');
   async function call(task, messages, options = {}) {
     const model=task==='memory'?(config.memoryModel||'MiniMax-M3'):config.model;const trace=activeStoryTrace();const started = Date.now();
-    const record = { operationId:trace?.record.operationId||null,parentTaskId:trace?.record.parentTaskId||null,attempt:trace?.record.attempt||null,codeVersion:CODE_VERSION,actualModel:null,failureStage:null,failureReason:null,requestedRange:options.diagnosticRange||null, requestId: randomUUID(), time: new Date().toISOString(), task, model, promptVersion: task==='memory'?'memory-v1':PROMPT_VERSION, durationMs: 0, success: false, errorCategory: null, inputTokens: null, outputTokens: null, totalTokens: null, sent: false, site:config.site, usageSource:null, cachedTokens:null, auditGroup:options.auditGroup || null, status:'pending',parentRequestId:options.parentRequestId||null };
+    const record = { operationId:trace?.record.operationId||null,parentTaskId:trace?.record.parentTaskId||null,attempt:trace?.record.attempt||null,codeVersion:CODE_VERSION,actualModel:null,failureStage:null,failureReason:null,requestedRange:options.diagnosticRange||null, requestId: randomUUID(), time: new Date().toISOString(), task, model, promptVersion: task==='memory'?MEMORY_PROMPT_VERSION:PROMPT_VERSION, durationMs: 0, success: false, errorCategory: null, inputTokens: null, outputTokens: null, totalTokens: null, sent: false, site:config.site, usageSource:null, cachedTokens:null, auditGroup:options.auditGroup || null, status:'pending',parentRequestId:options.parentRequestId||null };
     if(task==='memory')record.memoryBatchId=options.memoryBatchId||null;
     let phaseStart=started;record.phaseMs={};const stage=name=>{if(record.stage)record.phaseMs[record.stage]=(record.phaseMs[record.stage]||0)+Date.now()-phaseStart;record.stage=name;phaseStart=Date.now();};
     if(options.diagnosticClock){const c=options.diagnosticClock;record.clock={asOf:/^\d{4}-\d{2}-\d{2}$/.test(c.asOf)?c.asOf:null,startYear:Number.isInteger(c.startYear)?c.startYear:null,startMonth:Number.isInteger(c.startMonth)?c.startMonth:null};}
@@ -95,6 +96,7 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       record.failureStage=safeError.diagnostic?.stage || record.stage || 'local';
       record.failureReason=safeError.diagnostic?.reason || safeError.category;
       const field=safeError.diagnostic?.field;if(typeof field==='string' && /^(title|identity|intro|character|opening|scenes\.[0-2](?:\.(time|title|text))?)$/.test(field))record.failureField=field;
+      if(scoped&&safeError.diagnostic?.evidence){const e=safeError.diagnostic.evidence;log(JSON.stringify({type:'scoped_temporal_evidence',requestId:record.requestId,caseId:options.diagnosticCaseId,field:record.failureField,reason:record.failureReason,chapterTime:redactEvidence(String(e.chapterTime||''),config.key).slice(0,120),bodyDate:e.bodyDate,scope:e.scope,rule:e.rule,clause:redactEvidence(String(e.clause||''),config.key).slice(0,240)}));}
       record.errorCategory = safeError.category; safeError.requestId = record.requestId; throw safeError;
     } finally {
       if(record.stage)record.phaseMs[record.stage]=(record.phaseMs[record.stage]||0)+Date.now()-phaseStart;

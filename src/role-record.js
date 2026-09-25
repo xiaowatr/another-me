@@ -2,7 +2,8 @@ import {dateParts} from './input-anchors.js';
 import {historyRisk} from './session-context.js';
 // Only visible, unexcluded role messages; original wording retains modality and source.
 export function roleRecords(messages,background,memories=[],start=0){
- return messages.slice(start).filter(m=>m.role==='assistant'&&!m.contextExcluded&&!historyRisk(m.text||'',background,memories)).flatMap(m=>(m.text||'').split(/(?<=[。！？\n])/).map(text=>text.trim()).filter(text=>text && /[。！？]$/.test(text)&&!/[？?]|如果|假如|要是|你|现实用户|我(?:觉得|认为|猜你|听说你|记得你)/.test(text)).map((text,i)=>({sourceId:m.id+':'+i,kind:(/打算|计划|希望|想要|明天|明年|以后|将来|准备/.test(text)||dateParts(text).some(d=>d.year>new Date().getFullYear()||d.year===new Date().getFullYear()&&d.month>new Date().getMonth()+1))?'plan':/可能|也许|大概是|猜/.test(text)?'uncertain':'statement',text:text.slice(0,600)})));
+ const lastIdentity=messages.findLastIndex(m=>m.role==='user'&&!['failed','pending'].includes(m.status)&&/(?:你说错|不是我|不是你|我说的是)/.test(m.text||''));
+ return messages.slice(Math.max(start,lastIdentity+1)).filter(m=>m.role==='assistant'&&!m.contextExcluded&&!historyRisk(m.text||'',background,memories)).flatMap(m=>(m.text||'').split(/(?<=[。！？\n])/).map(text=>text.trim()).filter(text=>text && /[。！？]$/.test(text)&&!/[？?]|如果|假如|要是|你|现实用户|我(?:觉得|认为|猜你|听说你|记得你)/.test(text)).map((text,i)=>({sourceId:m.id+':'+i,kind:(/打算|计划|希望|想要|明天|明年|以后|将来|准备/.test(text)||dateParts(text).some(d=>d.year>new Date().getFullYear()||d.year===new Date().getFullYear()&&d.month>new Date().getMonth()+1))?'plan':/可能|也许|大概是|猜/.test(text)?'uncertain':'statement',text:text.slice(0,600)})));
 }
 export function selectRoleRecords(records,question=''){
  const terms=question.match(/[\p{Script=Han}]{2}/gu)||[];

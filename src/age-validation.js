@@ -1,6 +1,6 @@
 // Shared new-submission validation. Historical records remain readable.
 export function eventDate(b){
- const date=text=>{const m=String(text||'').match(/((?:18|19|20|21)\d{2})年(?:(\d{1,2})月)?/);return m?{year:+m[1],month:m[2]?+m[2]:null}:null;};
+ const date=text=>{const m=String(text||'').replace(/(?:观察|只看|只写)[：:]?\s*(?:18|19|20|21)\d{2}年\d{1,2}(?:月)?(?:—|–|-|至|到|和)\d{1,2}月/g,'').match(/((?:18|19|20|21)\d{2})年(?:(\d{1,2})月)?/);return m?{year:+m[1],month:m[2]?+m[2]:null}:null;};
  return date(b.hypotheticalDirection)||date(b.realityOutcome);
 }
 export function ageFieldErrors(b,year=new Date().getFullYear()){

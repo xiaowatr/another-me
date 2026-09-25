@@ -89,7 +89,7 @@ export function validateBackground(b,{newSubmission=false}={}) {
     if(b.inputVersion==='3' && !['eventContext','originalWish'].every(k=>str(b[k],1500)))throw new AppError('input');
     if(!['3','4','5','6'].includes(b.inputVersion) && !b.forkTime?.trim() && !coordinates(b).forkYear)throw new AppError('input');
     if(b.inputVersion==='6')return activeBackground(b);
-    return Object.fromEntries(['lifeSituation','choiceReason','gender','followupKey','followupQuestion','followupAnswer','followupSkipped','mbti','inputVersion','eventContext','originalWish',...(typeof b.locationText==='string'?['locationText']:[]),'birthYear','forkAge','forkYear','cityMode','city','cityType','why','feelings','realityOutcome','hypotheticalDirection','forkTime','keep','details','choice','age','reason','alternative'].map(k=>[k,typeof b[k]==='string'?b[k].trim().slice(0,1500):'']));
+    return Object.fromEntries(['clarificationAppliedAnswer','clarificationOriginal','lifeSituation','choiceReason','gender','followupKey','followupQuestion','followupAnswer','followupSkipped','mbti','inputVersion','eventContext','originalWish',...(typeof b.locationText==='string'?['locationText']:[]),'birthYear','forkAge','forkYear','cityMode','city','cityType','why','feelings','realityOutcome','hypotheticalDirection','forkTime','keep','details','choice','age','reason','alternative'].map(k=>[k,typeof b[k]==='string'?b[k].trim().slice(0,1500):'']));
   }
   if (!b || !['choice','age','reason','alternative','keep'].every(k => str(b[k], k === 'age' ? 80 : 1500)) || typeof b.details !== 'string' || b.details.length > 1500) throw new AppError('input');
   return Object.fromEntries(['choice','age','reason','alternative','keep','details'].map(k => [k,b[k].trim()]));

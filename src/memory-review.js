@@ -1,3 +1,4 @@
+import {dedupeMemories} from './memory-operations.js';
 function normalizeMemoryWording(value){return String(value||'').replace(/^(?:我)?(最近|近期)学(?!过)/,'我$1在学').replace(/((?:说错了|更正一下|更正)[，,:：\s]*)(?:我)?学的是/,'$1是');}
 import {applyMemoryOperations,candidateOperations} from './memory-operations.js';
 // Conservative summaries of explicit user clauses, without inferring traits.
@@ -88,7 +89,7 @@ export function finishReview(life,now=new Date().toISOString(),extract=proposeMe
  catch{return {...life,sessionMeta:{...meta,review:{...round,status:'failed'}}};}
 }
 export function dismissCandidates(life,next){const removed=(life.candidates||[]).filter(c=>!next.some(n=>n.id===c.id));return {...life,candidates:next,sessionMeta:{...emptyReview(),...life.sessionMeta,suppressed:[...(life.sessionMeta?.suppressed||[]),...removed.map(c=>({text:c.text,sourceId:c.sourceId,through:life.messages.length}))]}};}
-export function reviseMemories(life,next){const changed=(life.memories||[]).filter(m=>!next.some(n=>m.id===n.id&&m.text===n.text&&m.type===n.type));return {...life,memories:next,contextStart:changed.length?life.messages.length:life.contextStart,sessionMeta:{...emptyReview(),...life.sessionMeta,startedAt:life.sessionMeta?.startedAt||next.find(m=>m.savedAt&&!life.memories.some(old=>old.id===m.id&&old.savedAt===m.savedAt))?.savedAt||null,suppressed:[...(life.sessionMeta?.suppressed||[]),...changed.map(m=>({text:m.text,sourceId:m.sourceId,through:life.messages.length}))]}};}
+export function reviseMemories(life,next){next=dedupeMemories(next);const changed=(life.memories||[]).filter(m=>!next.some(n=>m.id===n.id&&m.text===n.text&&m.type===n.type));return {...life,memories:next,contextStart:changed.length?life.messages.length:life.contextStart,sessionMeta:{...emptyReview(),...life.sessionMeta,startedAt:life.sessionMeta?.startedAt||next.find(m=>m.savedAt&&!life.memories.some(old=>old.id===m.id&&old.savedAt===m.savedAt))?.savedAt||null,suppressed:[...(life.sessionMeta?.suppressed||[]),...changed.map(m=>({text:m.text,sourceId:m.sourceId,through:life.messages.length}))]}};}
 
 export function completeReview(life,ids=life.candidates.filter(c=>!c.requiresConfirmation&&candidateHasUserSource(life,c)&&['reality','preference'].includes(c.type)).map(c=>c.id)){
  let next=life;const accepted=[];

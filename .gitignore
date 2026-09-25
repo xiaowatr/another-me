@@ -22,3 +22,7 @@ tests/*
 !tests/memory50.test.js
 
 !tests/model-memory52.test.js
+
+!tests/targeted53.test.js
+
+!tests/targeted54.test.js

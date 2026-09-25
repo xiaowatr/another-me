@@ -5,7 +5,7 @@ import {coordinates} from '../src/context.js';
 // Conservative guard for common claims about the real past. It is not a semantic verifier.
 export function checkStoryGrounding(story,background,temporal){
  const source=JSON.stringify(background);
- const timeIssue=temporalIssues(story,background,temporal)[0];if(timeIssue)throw new AppError('background_conflict',422,{stage:'business',reason:timeIssue.reason==='outside_observation_window'?'outside_explicit_short_range':timeIssue.reason,field:timeIssue.field});
+ const timeIssue=temporalIssues(story,background,temporal)[0];if(timeIssue)throw new AppError('background_conflict',422,{stage:'business',reason:timeIssue.reason==='outside_observation_window'?'outside_explicit_short_range':timeIssue.reason,field:timeIssue.field,evidence:timeIssue.evidence});
  const fields=[...['title','identity','intro','character','opening'].map(key=>({field:key,text:story[key]})),...(story.scenes||[]).flatMap((s,i)=>['time','title','text'].map(key=>({field:`scenes.${i}.${key}`,text:s[key]})))].filter(f=>typeof f.text==='string');
  const text=fields.map(f=>f.text).join('。');
  for(const f of fields){const reason=dailyLifeIssue(f.text,background);if(reason)throw new AppError('background_conflict',422,{stage:'business',reason,field:f.field});}

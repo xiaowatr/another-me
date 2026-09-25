@@ -122,3 +122,11 @@ cd "C:\Users\小水\Desktop\职场小水\another me"
 结束聊天实际使用 POST /api/memory/extract，一批新用户消息至多一次模型调用；已有保存、来源与版本保护不变。前后端必须一起发布。独立环境变量（不填写时也有相同默认值）：MINIMAX_MEMORY_MODEL=MiniMax-M3、MINIMAX_MEMORY_THINKING=disabled、MINIMAX_MEMORY_MAX_TOKENS=2000；沿用服务端已有MINIMAX_API_KEY和站点地址，不增加前端密钥。故事/聊天参数和并发上限不变。
 12项定向离线检查和构建通过；有限真实提取6次中5次通过、1次结构/来源校验失败，不能宣称通用提取稳定。失败不更新旧记忆/处理位置，提示聊天已保存、记忆整理未完成；同进程可恢复缓存结果，不自动重试已失败模型请求。任务不能跨服务重启恢复，空闲时部署。版本2026-09-25.v52-local，故事Prompt v27不变，独立记忆Prompt memory-v1。
 审核 .env.example/.gitignore/src/server/tests/model-memory52.test.js/本说明后提交现有关联分支；勿提交.env、.local、私密台账、测试输出或无关目录。沿用Build npm ci && npm run build，Start npm start；推送后Render部署最新Commit，核对/api/status版本并刷新前端。未自动推送或部署，浏览器历史无需清空。
+
+### v53 定向修复（未发布）
+基线94a49cd，代码版本2026-09-25.v53-local；记忆提取Prompt memory-v2新增主体字段，仍M3/disabled/2000。前后端同批部署，旧存档无须清空。故事Prompt/模型/并发配置不变；聊天只补身份映射与纠正后的上下文选择，不增加审核调用。32项定向回归、生产构建和隔离浏览器模拟入口通过，未做真实调用。指定线上失败缺原始日志，未声明修复其模型输出。
+发布前审核git diff/status；只提交本轮src/server、.gitignore、tests/targeted53.test.js、tests/model-memory52.test.js与本部署说明；不加.local、.env、私密台账、无关目录。提交到原关联分支并git push origin main，Render Deploy latest commit（或等待已开启自动部署）。Build npm ci && npm run build；Start npm start；无需新增变量。核对/api/status v53-local及部署Commit，刷新前端。模型记忆任务仍仅同进程可恢复，空闲时部署；回退可选基线94a49cd，但会恢复旧主体/重复/追问缺口。
+
+### v54 日期作用域与记忆主体（未发布）
+前后端需同批发布；基线94a49cd，代码版本2026-09-25.v54-local，故事Prompt仍v27，记忆Prompt为memory-v3。M3/disabled/2000记忆配置、故事参数和并发上限不变，无新增必填环境变量。37项定向回归及构建通过，不代表真实生成或手机验收通过。
+审核git diff/status后只提交公开代码、合成测试和部署说明，排除.env、.local、私人台账及无关目录；推送原main后在Render部署最新Commit。沿用Build `npm ci && npm run build`、Start `npm start`。核对/api/status版本和Commit，刷新前端即可，不清空浏览器数据。任务仍不能跨服务重启恢复，空闲时部署。回退可选基线94a49cd，但会恢复此前缺陷。本轮未执行提交/推送/部署。
