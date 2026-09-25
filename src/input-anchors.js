@@ -77,13 +77,13 @@ export function observationWindow(b,fork,now=new Date()){
  for(const field of ['hypotheticalDirection','details','followupAnswer']){if(field==='followupAnswer'&&b.followupSkipped)continue;const text=b[field]||'',m=text.match(/(?:观察|只看|只写)[：:]?\s*((?:18|19|20|21)\d{2})年(\d{1,2})(?:月)?(?:—|–|-|至|到|和)(\d{1,2})月/);if(m&&+m[2]>=1&&+m[3]<=12&&+m[3]>=+m[2])return {months:+m[3]-+m[2]+1,anchor:'explicit-observation',start:{year:+m[1],month:+m[2]},end:{year:+m[1],month:+m[3]},precision:'month',sources:[{field,text:m[0]}]};}
 
  const sources=['hypotheticalDirection','details','followupAnswer'].filter(f=>f!=='followupAnswer'||!b.followupSkipped).flatMap(field=>String(b[field]||'').split(/[。；\n]/).flatMap(text=>{
- const normalized=text.replace(/半年/g,'六个月');const m=normalized.match(/(?:未来|接下来|之后|随后|以后|只写|只看|仅写|仅看|观察|从现在起|从当年|从那次|从(?:19|20)\d{2}年)[^。；]{0,35}?([0-9一二两三四五六七八九十]+)个月/);
+ const normalized=text.replace(/半年/g,'六个月');const m=normalized.match(/(?:未来|接下来|之后|随后|以后|只写|只看|仅写|仅看|观察|从现在起|从今天起|从当年|从那次|从(?:19|20)\d{2}年)[^。；]{0,35}?([0-9一二两三四五六七八九十]+)个月/);
  // Duration of the imagined stay; never reinterpret a stated past stay as this window.
  const stay=!/(?:现实|过去|曾经|以前)/.test(text)&&(field==='hypotheticalDirection'||/(?:驻留|停留|旅居)/.test(b.hypotheticalDirection||''))?(normalized.match(/(?:驻留|停留|旅居)([0-9一二两三四五六七八九十]+)个月/)||normalized.match(/([0-9一二两三四五六七八九十]+)个月[^。；，,]{0,8}(?:驻留|停留|旅居)/)):null;
  return m||stay?[{field,text,months:smallNumber((m||stay)[1]),...(stay?{scenarioDuration:true}:{})}]:[];
  }));
  if(!sources.length)return null;const item=sources.at(-1);if(!item.months)return null;
- const explicitNow=/从现在|从今天|接下来/.test(item.text),explicitFork=Boolean(item.scenarioDuration)||/从当年|从那年|从那次|分[岔叉].{0,8}起|从(?:19|20)\d{2}年|之后|随后|以后/.test(item.text),future=/未来/.test(item.text);
+ const explicitNow=/从现在|从今天/.test(item.text),explicitFork=Boolean(item.scenarioDuration)||/从当年|从那年|从那次|分[岔叉].{0,8}起|从(?:19|20)\d{2}年|接下来|之后|随后|以后/.test(item.text),future=/未来/.test(item.text);
  const current={year:now.getFullYear(),month:now.getMonth()+1,day:now.getDate()};
  const different=fork&&(fork.year!==current.year||fork.month&&fork.month!==current.month);
  const anchor=explicitNow?'now':explicitFork?'fork':future&&different?'ambiguous':future?'now':'fork';

@@ -9,7 +9,7 @@ export function compileSetting(input){
  const source=(field,text)=>({field,text});
  const exclusive=direction.match(/(?:只有|仅有|仅)(?:我|主角)([^，。；]+)/);
  const excluded=exclusive&&direction.match(/(?:^|[，。；])\s*([^，。；]{1,12}?)(?:没(?:有)?|未)([^，。；]+)/);
- const explicitPair=exclusive&&excluded&&exclusive[1].replace(/了/g,'').startsWith(excluded[2].replace(/了/g,''));
+ const explicitPair=exclusive&&excluded&&exclusive[1].replace(/了/g,'').startsWith(excluded[2].split(/(?:[、，]|也|并且|并|且)(?:不|没|未)/)[0].replace(/了/g,''));
  const replacement=direction.match(/(?:改为|换成)我([^，。；]+)/),addition=/(?:我也|我同样|同时)/.test(direction);
  const prior=real.match(/^(?:现实中)?(.{1,12}?)(?:那次|当时)([^，。；]+)/);
  let operation=explicitPair?'replace':replacement?'replace':addition?'add':/仅改变|只改变|只改/.test(direction)?'change':/^(?:保留|维持)/.test(direction)?'preserve':'unknown';

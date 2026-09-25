@@ -44,3 +44,5 @@ tests/*
 !tests/identity61.test.js
 
 !tests/mobile62.test.js
+!tests/targeted63.test.js
+!tests/story64.test.js

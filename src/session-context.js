@@ -5,7 +5,7 @@ import {coordinates} from './context.js';
 import {activeBackground} from './background.js';
 import {timelineInput} from './story-input.js';
 export function chatClock(background,now=new Date(),story=null){if(story)return storyClock(background,story);const year=now.getFullYear(),birth=Number(background.birthYear);return {mode:'present',asOf:now.toISOString().slice(0,10),year,approxAge:/^\d{4}$/.test(background.birthYear||'')&&birth<=year?year-birth:null};}
-export function chatIdentity(background,story){const t=chatClock(background,undefined,story);if(story)return `故事结束时${t.year?` · ${t.year}年${t.month?`${t.month}月`:""}`:""}${t.approxAge!=null?` · 大约${t.approxAge}岁`:""}`;return t.approxAge==null?'此刻，走过那条路的我':`现在的我 · 大约${t.approxAge}岁`;}
+export function chatIdentity(background,story){const t=chatClock(background,undefined,story);if(story)return `故事结束时${t.year?` · ${t.year}年${t.month?`${t.month}月${t.day?`${t.day}日`:""}`:""}`:""}${t.approxAge!=null?` · 大约${t.approxAge}岁`:""}`;return t.approxAge==null?'此刻，走过那条路的我':`现在的我 · 大约${t.approxAge}岁`;}
 export function historyRisk(text,background={},memories=[],story=null){
  const factRisk=inspectFactText(text,background,{memories,...(story?{anchorYear:storyClock(background,story).year}:{})});if(factRisk.length)return factRisk[0];
  const conditional=/(?:如果|要是|假如)[^。！？\n]{0,16}(?:那年|当年|当初|那次)[^。！？\n]{0,12}(?:我|我们)([^。！？\n]{0,30})/.exec(text);

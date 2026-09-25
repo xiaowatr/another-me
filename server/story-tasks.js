@@ -1,3 +1,4 @@
+import {rewriteFeedback} from './story-rewrite.js';
 import {STORY_MAX_REWRITES,STORY_MAX_MODEL_CALLS,retryableStoryFailure} from '../src/story-budget.js';
 import {settingNote} from '../src/setting-note.js';
 import {createHash,randomUUID} from 'node:crypto';
@@ -23,8 +24,8 @@ export function createStoryTasks({run,check=()=>{},now=Date.now,ttl=3600000,max=
   if(continuation==='rewrite')operation.rewrites++;operation.attempts++;operation.lastTaskId=taskId;
   const t={operation,parentTaskId,attempt:operation.attempts,id:taskId,owner,hash,status:'running',createdAt:now(),controller:new AbortController()};records.set(taskId,t);
   // Execute immediately, not through a serial queue; keep running across HTTP disconnects.
-  let started;try{started=run(input,{signal:t.controller.signal,owner,taskId,parentTaskId,operation,onSetting:effective=>{t.settingNote=settingNote(effective);}});}catch(e){started=Promise.reject(e);}
-  t.promise=Promise.resolve(started).then(result=>{if(t.controller.signal.aborted){t.status='cancelled';t.error={category:'stopped',error:errorMessages.stopped};}else{t.result=result;t.status='succeeded';}},e=>{t.status=t.controller.signal.aborted?'cancelled':'failed';const category=t.controller.signal.aborted?'stopped':e.category||'upstream';t.error={category,error:errorMessages[category]||errorMessages.upstream,requestId:e.requestId};}).finally(()=>{t.finishedAt=now();});
+  let started;try{started=run(input,{signal:t.controller.signal,owner,taskId,parentTaskId,operation,rewriteFeedback:continuation==='rewrite'?parent?.rewriteFeedback:null,onSetting:effective=>{t.settingNote=settingNote(effective);}});}catch(e){started=Promise.reject(e);}
+  t.promise=Promise.resolve(started).then(result=>{if(t.controller.signal.aborted){t.status='cancelled';t.error={category:'stopped',error:errorMessages.stopped};}else{t.result=result;t.status='succeeded';}},e=>{t.status=t.controller.signal.aborted?'cancelled':'failed';const category=t.controller.signal.aborted?'stopped':e.category||'upstream';t.error={category,error:errorMessages[category]||errorMessages.upstream,requestId:e.requestId};t.rewriteFeedback=rewriteFeedback(e);}).finally(()=>{t.finishedAt=now();});
   return view(t);
  },get:(owner,id)=>view(own(owner,id)),cancel(owner,id){const t=own(owner,id);if(t.status==='running')t.controller.abort();return view(t);},async settled(owner,id){await own(owner,id).promise;return view(own(owner,id));}};
 }

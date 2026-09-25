@@ -163,3 +163,10 @@ src/chat-viewport.js以真实容器位置做增量校正，补文档滚动和输
 ### v62 Safari 输入位置（本地未发布）
 有效visualViewport.height直接决定聊天高度；软键盘展开时取消额外安全区，其他状态保留原安全区，无固定百分比或浏览器UA偏移。版本2026-09-25.v62-local，保留v61人物归属及Prompt v28/memory-v5，模型预算不变。
 7项定向检查、生产构建和隔离真实CSS模拟通过，未Safari/微信真机复测。最终资源index-Dd1a-54E.js / index-CWJawJPa.css。未提交/推送/部署；用户发起发布后审核v61/v62公开代码、合成测试及本说明，沿原关联分支和现有Render Build/Start部署，核对后端版本和前端资源，原Safari与微信对照验收。不清空数据，不提交私密台账或临时夹具。
+
+## v63 定向修复发布说明
+本轮本地代码修复相对观察期限锚点、显式排除关系解析、聊天时点纠正传递、未提供性别时针对主角的直接引语称呼，以及前端累计调用预算/明确拒绝后的任务状态。26项定向离线检查与生产构建通过；真实模型语义、线上和手机效果尚未复测，不能视为全部验收通过。构建index-CGn666Av.js / index-CWJawJPa.css，后端2026-09-25.v63-local，Prompt 2026-09-25.v29。
+当前实际模型保持MiniMax国内站MiniMax-M3（上文早期M2.5表为历史记录），故事thinking disabled/6000，记忆thinking disabled/2000，memory-v5；不需要更换密钥或服务。只提交本轮src、server、.gitignore、tests/targeted63.test.js及此说明，私密台账、附件、日志、.local和其他未跟踪目录不提交。普通推送到现有Render绑定main后自动部署或手动Deploy latest commit；保持既有Build/Start命令及域名。部署后同时核对状态接口版本与页面资源哈希。本轮未自动提交、推送或部署。
+
+## v64 四次预算与重写反馈
+总模型调用上限按授权调整为4次（含模型追问），自动重写最多3次。重写接收服务端上次校验原因和字段，保持原有效设定及时间校验，不靠放宽校验获取成功。需发布新增server/story-rewrite.js及本轮src/server修改、相关合成测试。23项定向离线检查与构建通过，v64-local/Prompt v30，index-kwPjDavy.js / index-CWJawJPa.css；未真实模型复测，不保证所有生成成功。本地尚未提交推送部署；模型/密钥/Build/Start保持既有配置。输入框用户现场反馈位置已正常，本轮未修改布局。
