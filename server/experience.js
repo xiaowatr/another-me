@@ -81,7 +81,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
     status() { return {maxConcurrent:slots.limit,activeModelTasks:slots.active,storyThinking:config.storyThinking||'disabled',storyMaxCompletionTokens:6000, version:CODE_VERSION,commit:/^[a-f0-9]{40}$/.test(process.env.RENDER_GIT_COMMIT||'')?process.env.RENDER_GIT_COMMIT:null,promptVersion:PROMPT_VERSION,semanticReviewEnabled:Boolean(config.reviewStories),processStartedAt:PROCESS_STARTED_AT, mode: config.mode, site: config.site, model: config.model,  }; },
     story: (input,{signal,onSetting}={}) => exclusive('story', async () => {
       const diagnosticCaseId=takeDiagnosticCase(input.background||{});
-      let background = validateBackground(migrateBackground(applyClarification(input.background)));
+      let background = validateBackground(migrateBackground(applyClarification(input.background)),{newSubmission:true});
       if(diagnosticCaseId)background={...background,details:background.details.replace('[诊断:'+diagnosticCaseId+']','').trim()};
       if (typeof (input.clarification ?? '') !== 'string' || (input.clarification || '').length > 2000) throw new AppError('input');
       if(input.clarification)background={...background,followupKey:'model',followupAnswer:input.clarification,followupSkipped:''};

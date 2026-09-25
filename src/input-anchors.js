@@ -1,7 +1,8 @@
-﻿export const dateParts=text=>[...String(text||'').matchAll(/((?:19|20)\d{2})年(?:(\d{1,2})月(?:(\d{1,2})日)?)?/g)].map(m=>({year:+m[1],month:m[2]?+m[2]:null,...(m[3]?{day:+m[3]}:{}),text:m[0]})).filter(d=>d.month==null||d.month>=1&&d.month<=12);
+import {eventDate} from './age-validation.js';
+﻿export const dateParts=text=>[...String(text||'').matchAll(/((?:18|19|20|21)\d{2})年(?:(\d{1,2})月(?:(\d{1,2})日)?)?/g)].map(m=>({year:+m[1],month:m[2]?+m[2]:null,...(m[3]?{day:+m[3]}:{}),text:m[0]})).filter(d=>d.month==null||d.month>=1&&d.month<=12);
 export function timeAnchors(b,now=new Date()){
  const sources=['hypotheticalDirection','realityOutcome','details'].flatMap(field=>dateParts(b[field]).map(d=>({...d,field,source:b[field]})));
- const start=sources.find(d=>d.field==='hypotheticalDirection')||sources.find(d=>d.field==='realityOutcome')||null;
+ const start=sources.find(d=>d.field==='hypotheticalDirection')||sources.find(d=>d.field==='realityOutcome')||(/^\d{4}$/.test(b.birthYear||'')&&/^\d{1,3}$/.test(b.forkAge||'')?{year:+b.birthYear+ +b.forkAge,month:null,estimated:true}:null);
  const window=observationWindow(b,start,now);
  return {window,start,sources,asOf:now.toISOString().slice(0,10),currentYear:now.getFullYear(),currentMonth:now.getMonth()+1,observationRange:(b.hypotheticalDirection||'').match(/(?:只写|只看|仅写|仅看)([^。；]+)/)?.[1]||null};
 }
@@ -39,7 +40,7 @@ export function hardConflicts(b){const out=[];for(const field of ['realityOutcom
  if(field==='hypotheticalDirection'&&!/更正|说错|其实|先.*再|后来|然后/.test(text)&&/(?:想|希望|假设|假如|这次).*(?:去|离开)/.test(text)&&/(?:想|希望|假设|假如|这次).*(?:留下|留在)/.test(text))out.push({field,sources:[text],question:'这次想探索离开，还是留下？'});
  }
  const anchor=timeAnchors(b);if(anchor.window?.anchor==='ambiguous')out.push({field:'range',sources:anchor.window.sources.map(s=>s.text),question:'这'+anchor.window.months+'个月从现在开始，还是从故事中的那次经历开始？请在原输入中说明起点。'});
- const y=dateParts(b.realityOutcome)[0]?.year??(/未来|尚未|还未/.test(b.hypotheticalDirection||'')?null:anchor.start?.year);if(y&&/^\d{4}$/.test(b.birthYear||'')&&/^\d+$/.test(b.forkAge||'')&& ![y-Number(b.birthYear),y-Number(b.birthYear)-1].includes(+b.forkAge))out.push({field:'time',sources:[b.birthYear,b.forkAge,String(y)],question:'出生年份、当时年龄和事件年份对不上，请核对后修改原填写项。'});
+ const y=eventDate(b)?.year;if(y&&/^\d{4}$/.test(b.birthYear||'')&&/^\d+$/.test(b.forkAge||'')&& ![y-Number(b.birthYear),y-Number(b.birthYear)-1].includes(+b.forkAge))out.push({field:'time',sources:[b.birthYear,b.forkAge,String(y)],question:'出生年份、当时年龄和事件年份对不上，请核对后修改原填写项。'});
  return out;
 }
 export function roleGender(b){const change=(b.hypotheticalDirection||'').match(/(?:我是|出生时是|出生就是|变成)(?:一个|个)?(男生|男孩|男性|女生|女孩|女性|非二元)/);return change?(/男/.test(change[1])?'男':/女/.test(change[1])?'女':'非二元'):['女','男','非二元'].includes(b.gender)?b.gender:null;}

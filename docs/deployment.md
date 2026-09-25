@@ -106,3 +106,14 @@ cd "C:\Users\小水\Desktop\职场小水\another me"
 
 ### v48 本地待发布
 学习记忆省略更新、明确替换事件编译、聊天故事末章时钟。34项离线定向回归和构建通过；真实效果未付费复测。无新环境变量，不改并发上限或模型。发布前审核src、server及本部署说明，只提交公开代码，排除.env/.local/私密台账与无关目录。推送Render关联main后部署最新Commit；Build npm ci && npm run build，Start npm start。上线核对/api/status version=2026-09-25.v48-local、promptVersion=2026-09-25.v27、model=MiniMax-M3，并刷新网页。内存任务不能跨重启恢复，空闲时发布。存档仍在原浏览器，升级不要求清空。
+
+### v49 本地待发布：整数年龄与记忆更新
+- 基线c882bce，本轮未commit/push；代码版本2026-09-25.v49-local，Prompt仍2026-09-25.v27，模型仍MiniMax-M3。
+- 新生成必须填写出生年份与事件年龄；旧故事/聊天读取不受新必填阻断。记忆先完成持久化再发布处理进度；规则覆盖有限，不承诺任意表达都能提取。46项定向离线回归及2项生产HTTP/限流检查、构建通过；全量历史用例仍有旧契约等失败，未宣称全绿。无付费验证或手机真机验收。
+- 审核改动后：git add .gitignore src server tests/iteration49.test.js tests/tasks37.test.js tests/production.test.js docs/deployment.md；git diff --cached；git commit -m "fix required event ages and transactional memory updates"；git push origin main。不要加入未关联目录、.local、.env或私密台账。Render选择Deploy latest commit（已开自动部署则等其完成），无需新环境变量。Build npm ci && npm run build；Start npm start。核对/api/status版本和实际Commit，刷新前端资源。空闲时部署；回退本轮前c882bce也会恢复旧行为。
+
+### v50 记忆链路（未发布）
+- 页面确认与自动结束共用显式操作执行和持久化；不明确的纠正可确认替换；新旧数据兼容。36项离线回归与构建通过，未真实手机验收，无新增模型调用或环境变量。版本v50-local，Prompt/模型不变。提交时包含src/memory-operations.js、src/MemoryPanel.jsx、src/memory-review.js、src/life-store.js、src/main.jsx及版本文件；同一部署包含此前未发布改动。仅提交公开代码/合成测试，勿提交.local和私人台账。发布沿用main与Render现有命令，非自动发布。
+
+### v51 发布前浏览器验收
+独立演示origin实际点击三轮记忆结束保存、刷新和手动确认替换通过；修正已有学习表达的省略形式，不增加主题词表。版本2026-09-25.v51-local，Prompt v27/M3不变。历史测试分类见本机台账，未宣称全套通过。提交当前已审核src/server、公开合成测试与部署说明，推送main后Render Deploy latest commit；环境变量无需新增。更新不会清空浏览器存档，线上尚未发布。

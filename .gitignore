@@ -15,3 +15,8 @@ tests/*
 
 !tests/iteration14.test.js
 !tests/tasks37.test.js
+
+# Public synthetic regression cases; no user transcripts.
+!tests/iteration49.test.js
+
+!tests/memory50.test.js

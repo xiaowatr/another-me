@@ -4,7 +4,7 @@ import {chatClock,lifeContext,historyRisk} from './session-context.js';
 import {backupBeforeMigration} from './storage-migration.js';
 ﻿export const LIFE_KEY='another-me.lives.v1';
 export function readLives(storage){try{const data=JSON.parse(storage.getItem(LIFE_KEY));if([1,2].includes(data?.version) && Array.isArray(data.lives))return {activeId:data.activeId,lives:data.lives.filter(l=>typeof l.id==='string' && l.story && Array.isArray(l.messages)).map(l=>({...l,background:migrateBackground(l.background),retiredBackground:l.retiredBackground || retiredBackground(l.background),conversationContext:lifeContext(migrateBackground(l.background),l.story,l.memories||[]),chatTime:chatClock(l.background||{},undefined,l.story),sessionMeta:{...(l.sessionMeta||{}),...(l.sessionMeta?.review?.status==='pending'?{review:{...l.sessionMeta.review,status:'failed'}}:{})},messages:l.messages.map((m,i)=>({...m,id:m.id||`${l.id}:legacy:${i}`,...(m.contextExcluded || (m.role==='assistant'&&historyRisk(m.text||'',l.background,l.memories||[],l.story))?{contextExcluded:true}:{}),status:m.status==='pending'?'failed':m.status})),memories:Array.isArray(l.memories)?l.memories:[],candidates:Array.isArray(l.candidates)?l.candidates:[]}))};}catch{}return {activeId:null,lives:[]};}
-export function writeLives(storage,data){try{if(!backupBeforeMigration(storage,LIFE_KEY))return false;storage.setItem(LIFE_KEY,JSON.stringify({...data,version:2,lives:(data.lives||[]).map(l=>({...l,background:migrateBackground(l.background),retiredBackground:l.retiredBackground||retiredBackground(l.background),conversationContext:lifeContext(migrateBackground(l.background),l.story,l.memories||[]),chatTime:chatClock(l.background||{},undefined,l.story),roleRecords:roleRecords(l.messages||[],l.background||{},l.memories||[],l.contextStart||0)}))}));return true;}catch{return false;}}
+export function writeLives(storage,data){try{const stored=JSON.parse(storage.getItem(LIFE_KEY)||'null');if(data.lives?.some(l=>(stored?.lives?.find(x=>x.id===l.id)?.memoryRevision||0)>(l.memoryRevision||0)))return false;if(!backupBeforeMigration(storage,LIFE_KEY))return false;storage.setItem(LIFE_KEY,JSON.stringify({...data,version:2,lives:(data.lives||[]).map(l=>({...l,background:migrateBackground(l.background),retiredBackground:l.retiredBackground||retiredBackground(l.background),conversationContext:lifeContext(migrateBackground(l.background),l.story,l.memories||[]),chatTime:chatClock(l.background||{},undefined,l.story),roleRecords:roleRecords(l.messages||[],l.background||{},l.memories||[],l.contextStart||0)}))}));return true;}catch{return false;}}
 export function modelHistory(messages,skipId=null,contextStart=0){
  const entries=[];
  for(const m of messages.slice(contextStart)){
@@ -22,3 +22,11 @@ export function applyMemory(memories,item){
 }
 // Explicit deletion also removes the same life from the recoverable migration copy.
 export function removeLifeBackup(storage,id){try{const key=LIFE_KEY+'.before-v8',raw=storage.getItem(key);if(!raw)return true;const data=JSON.parse(raw);if(Array.isArray(data.lives)){storage.setItem(key,JSON.stringify({...data,activeId:data.activeId===id?null:data.activeId,lives:data.lives.filter(l=>l.id!==id)}));}return true;}catch{return false;}}
+
+// Publish processed-message cursors only after durable storage accepts the whole change.
+export function persistLifeChange(storage,lives,activeId,id,current,transform){
+ const stored=readLives(storage).lives.find(l=>l.id===id);if((stored?.memoryRevision||0)>(current.memoryRevision||0))return {okay:false,next:current,lives,reason:'stale_memory'};
+ const next={...transform(current),memoryRevision:(current.memoryRevision||0)+1},all=lives.map(l=>l.id===id?next:l);
+ const okay=writeLives(storage,{activeId,lives:all});
+ return okay?{okay,next,lives:all}:{okay:false,next:current,lives};
+}

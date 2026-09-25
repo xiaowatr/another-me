@@ -1,3 +1,4 @@
+import {ageFieldErrors} from '../src/age-validation.js';
 import {strictJson,normalizeChapters} from './structured-story.js';
 import { MBTI_TYPES,activeBackground } from '../src/background.js';
 ﻿import { coordinateError,coordinates } from '../src/context.js';
@@ -75,7 +76,8 @@ export function parseResult(content, task, diagnostic = {}) {
   if ((data.kind !== undefined && data.kind !== 'story') || !['title', 'identity', 'intro', 'character', 'opening'].every(k => str(data[k], 2000)) || !Array.isArray(data.scenes) || data.scenes.length !== 3 || !data.scenes.every(s => str(s.time, 60) && str(s.title, 150) && str(s.text, 2000))) throw new AppError('invalid_response', 502,{stage:'schema',reason:'story_fields'});
   return { kind: 'story', title: data.title, ...(typeof data.synopsis==='string'?{synopsis:data.synopsis.slice(0,180)}:{}), identity: data.identity, intro: data.intro, character: data.character, opening: data.opening, scenes: data.scenes.map(({ time, title, text }) => ({ time, title, text })) };
 }
-export function validateBackground(b) {
+export function validateBackground(b,{newSubmission=false}={}) {
+  if(newSubmission&&Object.keys(ageFieldErrors(b||{})).length)throw new AppError('input',400,{fieldErrors:ageFieldErrors(b||{})});
   if(b && 'realityOutcome' in b){
     if(!['realityOutcome','hypotheticalDirection'].every(k=>str(b[k],k==='forkTime'?80:1500)) || typeof b.details!=='string' || b.details.length>1500) throw new AppError('input');
     if(b.choiceReason && (typeof b.choiceReason!=='string'||b.choiceReason.length>1500))throw new AppError('input');
