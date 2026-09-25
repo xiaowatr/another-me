@@ -1,3 +1,4 @@
+import {applyConversationSummary} from './conversation-summary.js';
 import {isIdentityCorrection} from './participant-identity.js';
 import {applyMemoryOperations} from './memory-operations.js';
 import {reviseMemories} from './memory-review.js';
@@ -15,7 +16,11 @@ export function acceptMemoryResult(life,job,result){
  if(result.lifeId!==life.id||result.batchId!==job.id)throw Error('memory_owner');
  const sourceIds=new Set(job.input.messages.map(m=>m.id));
  if(result.operations.some(o=>!sourceIds.has(o.sourceId)))throw Error('memory_source');
- const pending=result.operations.filter(o=>o.needsConfirmation).map(o=>({id:o.id,type:o.type||'reality',text:o.text||'请填写更正后的内容',sourceId:o.sourceId,sourceText:job.input.messages.find(m=>m.id===o.sourceId).text,sourceRole:'user',requiresConfirmation:true,confirmationKind:o.kind,confirmTargetId:o.targetId||'',expectedText:o.expectedText,origin:'model'}));
+ if((result.conversationSummary||[]).some(row=>!sourceIds.has(row.sourceId)))throw Error('memory_source');
+ life=applyConversationSummary(life,result.conversationSummary);
+ // An unexplained empty extraction is not proof that the input has been fully handled.
+ if(result.operations.length===0&&result.summary?.proposed===0)return {...life,sessionMeta:{...life.sessionMeta,memoryJob:{...job,status:'empty',requestId:result.requestId},review:{status:'empty',end:job.input.end},memoryOutcome:'empty'}};
+ const pending=result.operations.filter(o=>o.needsConfirmation).map(o=>({id:o.id,type:o.type||'reality',text:o.text||'请填写更正后的内容',sourceId:o.sourceId,sourceText:job.input.messages.find(m=>m.id===o.sourceId).text,sourceRole:'user',requiresConfirmation:true,confirmationKind:o.kind,confirmationReason:o.confirmationReason||null,confirmTargetId:o.targetId||'',expectedText:o.expectedText,origin:'model'}));
  const applied=applyMemoryOperations(life,{lifeId:life.id,operations:result.operations.filter(o=>!o.needsConfirmation)});
  const next=reviseMemories({...life,sessionMeta:applied.sessionMeta},applied.memories);
  return {...next,candidates:[...next.candidates,...pending],sessionMeta:{...next.sessionMeta,organizedUntil:job.input.end,roundStart:job.input.end,memoryJob:{...job,status:'complete',requestId:result.requestId},review:{status:'complete',end:job.input.end},memoryOutcome:pending.length?'confirmation':applied.sessionMeta.memoryOutcome}};

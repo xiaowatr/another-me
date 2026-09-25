@@ -17,6 +17,6 @@ export default function MemoryPanel({messages=[],memories,candidates,onCandidate
  {editing===m.id?<><button className="text-button" disabled={disabled||!text.trim()} onClick={()=>{const result=onMemories(memories.map(x=>x.id===m.id?{...x,text:text.trim()}:x));if(!result?.okay){setError('未能保存，请重试。');return;}setEditing(null);onSaved();}}>保存</button><button className="text-button" onClick={()=>setEditing(null)}>取消</button></>:<button className="text-button" disabled={disabled} onClick={()=>{setEditing(m.id);setText(m.text);}}>编辑</button>}
  <button className="text-button memory-delete" disabled={disabled} onClick={()=>onMemories(memories.filter(x=>x.id!==m.id))}>删除</button>
  </div>{source(m)}</article>)}</section>)}
- {!memories.length&&<p className="small">聊完点击“先聊到这儿吧”，会整理值得留下的内容。</p>}
+ {!memories.length&&<p className="small">聊完点击“先聊到这儿吧”，会总结你的发言，并核对其中的个人事实。</p>}
  </section>;
 }

@@ -47,3 +47,7 @@ tests/*
 !tests/targeted63.test.js
 !tests/story64.test.js
 !tests/normal65.test.js
+!tests/memory66.test.js
+!tests/memory67.test.js
+
+!tests/summary68.test.js
