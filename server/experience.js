@@ -1,3 +1,5 @@
+import {storyClock} from '../src/story-clock.js';
+import {publicQuestion} from '../src/public-question.js';
 import {currentOwner,createSlots} from './request-owner.js';
 import {activeStoryTrace,PROCESS_STARTED_AT} from './story-timing.js';
 import {rolePresentation,presentNewStory} from '../src/role-presentation.js';
@@ -68,7 +70,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       // Unconfirmed chat corrections remain in recent conversation; only UI-confirmed memories are pinned.
       emit({type:'start',turnId:p.id,corrections:s.corrections});
       let buffered='';
-      const forward=text=>{text=qualifyCurrentAge(rolePresentation(readableText(text),s.background),s.background);const risks=inspectFactText(text,s.background,{memories:s.memories});if(risks.length)throw new AppError('background_conflict',422,{stage:'business',reason:risks[0]});checkChatGrounding(text,s.background,s.memories || [],JSON.stringify({story:s.story,roleRecords:s.roleRecords,fiction:s.memories.filter(m=>m.type==='fiction')}),recallTarget(message));p.text+=text;emit({type:'text',text});};
+      const forward=text=>{text=qualifyCurrentAge(rolePresentation(readableText(text),s.background),s.background,s.story);const risks=inspectFactText(text,s.background,{memories:s.memories,anchorYear:storyClock(s.background,s.story).year});if(risks.length)throw new AppError('background_conflict',422,{stage:'business',reason:risks[0]});checkChatGrounding(text,s.background,s.memories || [],JSON.stringify({story:s.story,roleRecords:s.roleRecords,fiction:s.memories.filter(m=>m.type==='fiction')}),recallTarget(message));p.text+=text;emit({type:'text',text});};
       const onText=text=>{buffered+=text;let match;while((match=/[。！？!?\n]/.exec(buffered))){const end=match.index+1;const sentence=buffered.slice(0,end);buffered=buffered.slice(end);forward(sentence);}};
       const response=config.mode==='demo'?{result:{reply:await demoProvider.reply({turn:s.history.length/2})}}:await caller.call('chat',streamingChatMessages(s,message,intent),{onText,validateResult:()=>{if(buffered){forward(buffered);buffered='';}},onStart:requestId=>emit({type:'request',requestId}),signal:AbortSignal.any([signal,controller.signal])});
       if(config.mode==='demo')onText(response.result.reply);
@@ -93,7 +95,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       activeStoryTrace()?.mark('model_parse_validation_completed');
       response.result=readableResult(response.result);if(response.result.kind==='story')response.result=presentNewStory(response.result,background);
       if(response.result.kind==='story')response.result.openingVersion=2;
-      if (response.result.kind === 'clarification') return { ...response.result, mode: config.mode, requestId: response.requestId };
+      if (response.result.kind === 'clarification') return { ...response.result, question:publicQuestion(response.result.question), mode: config.mode, requestId: response.requestId };
       const id = randomUUID();
       // 成功重生成才替换旧会话，失败仍保留原故事。设置独立角色和空历史。
       if (input.previousSessionId&&sessions.get(input.previousSessionId)?.owner===currentOwner()) sessions.delete(input.previousSessionId);
@@ -112,8 +114,8 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       if (s.corrections.length >= 20) throw new AppError('memory_full');
       const pending = intent === 'chat' ? [] : [{ type: intent, text: message.trim() }];
       const response = config.mode === 'demo' ? { result: { reply: await demoProvider.reply({ turn: s.history.length / 2 }), updateType: intent === 'chat' ? 'none' : intent } } : await caller.call('chat', chatMessages({ ...s, corrections: [...s.corrections, ...pending] }, message.trim(), intent));
-      response.result.reply=qualifyCurrentAge(rolePresentation(readableText(response.result.reply),s.background),s.background);
-      const risks=inspectFactText(response.result.reply,s.background,{memories:s.memories});
+      response.result.reply=qualifyCurrentAge(rolePresentation(readableText(response.result.reply),s.background),s.background,s.story);
+      const risks=inspectFactText(response.result.reply,s.background,{memories:s.memories,anchorYear:storyClock(s.background,s.story).year});
       if(risks.length)throw new AppError('background_conflict',422,{stage:'business',reason:risks[0]});
       const type = intent === 'chat' ? 'none' : intent;
       if (type !== 'none') s.corrections.push({ type, text: message.trim() });

@@ -7,13 +7,17 @@ import {coordinates} from './context.js';
 export function compileSetting(input){
  const b=activeBackground(input),timeline=timelineInput(b),direction=b.hypotheticalDirection||'',real=b.realityOutcome||'';
  const source=(field,text)=>({field,text});
+ const exclusive=direction.match(/(?:只有|仅有|仅)(?:我|主角)([^，。；]+)/);
+ const excluded=exclusive&&direction.match(/(?:^|[，。；])\s*([^，。；]{1,12}?)(?:没(?:有)?|未)([^，。；]+)/);
+ const explicitPair=exclusive&&excluded&&exclusive[1].replace(/了/g,'').startsWith(excluded[2].replace(/了/g,''));
  const replacement=direction.match(/(?:改为|换成)我([^，。；]+)/),addition=/(?:我也|我同样|同时)/.test(direction);
  const prior=real.match(/^(?:现实中)?(.{1,12}?)(?:那次|当时)([^，。；]+)/);
- let operation=replacement?'replace':addition?'add':/仅改变|只改变|只改/.test(direction)?'change':/^(?:保留|维持)/.test(direction)?'preserve':'unknown';
+ let operation=explicitPair?'replace':replacement?'replace':addition?'add':/仅改变|只改变|只改/.test(direction)?'change':/^(?:保留|维持)/.test(direction)?'preserve':'unknown';
  const issues=[];if(replacement&&addition)issues.push('这次是替换原来的结果，还是两个人都经历这件事？');
- if(replacement&&!prior)issues.push('这次要替换谁原来的结果？请在现实经过中写清人物和那次发生的事。');
+ if(replacement&&!prior&&!explicitPair)issues.push('这次要替换谁原来的结果？请在现实经过中写清人物和那次发生的事。');
  const facts=[];
- if(replacement&&prior){facts.push({subject:'我',predicate:replacement[1],polarity:true,source:source('hypotheticalDirection',replacement[0])});if(prior[1]!=='我')facts.push({subject:prior[1],predicate:replacement[1],polarity:false,source:source('realityOutcome',prior[0])});}
+ if(explicitPair){facts.push({subject:'我',predicate:exclusive[1],polarity:true,source:source('hypotheticalDirection',exclusive[0])},{subject:excluded[1],predicate:exclusive[1],polarity:false,source:source('hypotheticalDirection',excluded[0])});}
+ if(!explicitPair&&replacement&&prior){facts.push({subject:'我',predicate:replacement[1],polarity:true,source:source('hypotheticalDirection',replacement[0])});if(prior[1]!=='我')facts.push({subject:prior[1],predicate:replacement[1],polarity:false,source:source('realityOutcome',prior[0])});}
  if(addition){const own=direction.match(/我(?:也|同样)([^，。；]+)/);if(own)facts.push({subject:'我',predicate:own[1],polarity:true,source:source('hypotheticalDirection',own[0])});if(prior)facts.push({subject:prior[1],predicate:prior[2],polarity:true,source:source('realityOutcome',prior[0])});}
  const retained=[];for(const [field,text] of [['details',b.details],['hypotheticalDirection',direction],['followupAnswer',b.followupSkipped?'':b.followupAnswer]])for(const clause of (text||'').split(/[。；]/).filter(Boolean)){if(/不改变|保留|仍然|仍|不设定|不要/.test(clause))retained.push({text:clause,source:source(field,clause)});}
  // Explicit independently dated endings are retained without importing the alternative choice.
@@ -24,7 +28,7 @@ export function compileSetting(input){
 }
 export function generationSetting(c){
  const clean=x=>x.map(({source,...item})=>item);
- return {version:c.version,lifeSituation:c.lifeSituation||'',operation:c.operation,...(c.realityReference?{realityReference:{event:c.realityReference.event,meaning:c.realityReference.meaning}}:{}),change:c.change.text,facts:clean(c.facts),retained:clean(c.retained),known:clean(c.known),roleGender:c.roleGender,temporal:c.temporal,timeRange:c.timeRange,coordinates:c.coordinates,chatTime:{year:new Date().getFullYear(),approximateAge:c.coordinates.birthYear==null?null:new Date().getFullYear()-c.coordinates.birthYear},style:c.style,supplement:c.supplement,considerations:c.considerations,reportedSpeech:c.reportedSpeech,explicitPremises:c.explicitPremises,answer:c.answer,choiceReason:c.choiceReason,unknown:c.unknown};
+ return {version:c.version,lifeSituation:c.lifeSituation||'',operation:c.operation,...(c.realityReference?{realityReference:{event:c.realityReference.event,meaning:c.realityReference.meaning}}:{}),change:c.change.text,facts:clean(c.facts),retained:clean(c.retained),known:clean(c.known),roleGender:c.roleGender,temporal:c.temporal,timeRange:c.timeRange,coordinates:c.coordinates,chatTime:{mode:'story_end',meaning:'交流从故事最后一个生活片段的时间开始，之后尚未发生的经历只是计划或假设'},style:c.style,supplement:c.supplement,considerations:c.considerations,reportedSpeech:c.reportedSpeech,explicitPremises:c.explicitPremises,answer:c.answer,choiceReason:c.choiceReason,unknown:c.unknown};
 }
 const escape=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 // Bounded event-owner check, not a full semantic verifier. Negation is attached to each predicate occurrence.

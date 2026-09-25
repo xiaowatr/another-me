@@ -103,3 +103,6 @@ cd "C:\Users\小水\Desktop\职场小水\another me"
 - 无新增必填环境变量。保留 MINIMAX_MODEL=MiniMax-M3、既有服务端密钥及 MODEL_MAX_CONCURRENT；REQUEST_DIAGNOSTICS 未设置或非0时输出脱敏诊断，排查时可明确设为1。
 - 准备发布时先审核git diff/status，仅提交可发布代码，排除.env/.local/私人记录；提交并推送现有Render关联分支，使用现有自动部署或Deploy latest commit。Build仍npm ci && npm run build，Start仍npm start，Root Directory沿用当前值。不需要升级套餐。
 - 部署后检查/api/status版本2026-09-25.v45-local、Commit、maxConcurrent与模型；客户端刷新加载新资源。重启会丢失内存中未完成任务，选择无活跃任务时部署。退回本轮前的已部署Commit可恢复旧行为，但也恢复旧重写关联限制。此轮未执行发布。
+
+### v48 本地待发布
+学习记忆省略更新、明确替换事件编译、聊天故事末章时钟。34项离线定向回归和构建通过；真实效果未付费复测。无新环境变量，不改并发上限或模型。发布前审核src、server及本部署说明，只提交公开代码，排除.env/.local/私密台账与无关目录。推送Render关联main后部署最新Commit；Build npm ci && npm run build，Start npm start。上线核对/api/status version=2026-09-25.v48-local、promptVersion=2026-09-25.v27、model=MiniMax-M3，并刷新网页。内存任务不能跨重启恢复，空闲时发布。存档仍在原浏览器，升级不要求清空。

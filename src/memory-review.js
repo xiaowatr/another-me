@@ -5,6 +5,7 @@ export function summarizeMemory(value){
  if(/^(?:最近|近期)(?:在学|正在学|开始学)/.test(text))text='我'+text;
  if(/^(?:我)?(?:平时|通常|每周|周末)(?:经常|总是|会|都)(?!不会)(.+)$/.test(text))text=text.replace(/^(?:我)?(平时|通常|每周|周末)(?:经常|总是|会|都)(.+)$/,'我习惯$1$2');
  if(/^(?:刚刚|刚|最近|近期)?(?:开始|正在|在)(?:练习|练)(?![?？])/.test(text))text='我'+text;
+ if(/^学[^？?]+$/.test(text)&&!/^学习|学过/.test(text))text='我正在学习'+text.slice(1);
  if(/^(?:学习|学过|正在学)/.test(text))text='我'+text.replace(/^学习/,'正在学习');
  if(/^(?:最近|近期)?(?:开始学|学摄影|喜欢|不喜欢)/.test(text))text='我'+text.replace(/^最近学/,'最近开始学');
  text=text.replace(/^(?:现在|如今)([^，,。]{1,30})我(?:也)?喜欢了$/, '我也喜欢$1').replace(/^我(?:现在|如今)(也)?/, '我$1');
@@ -42,7 +43,8 @@ export function proposeMemories(life){
  const known=[...(life.memories||[]),...(life.candidates||[])];
  for(let i=start;i<end;i++){const m=life.messages[i];if(m.role!=='user'||m.status==='pending'||m.status==='failed')continue;
  if(m.kind==='closing')continue;
- const clauses=memoryClauses(m.text);
+ const pool=[...candidates,...updatedCandidates,...(life.memories||[])];
+ const clauses=memoryClauses(m.text).flatMap(c=>learningContinuation(c,pool,life.messages.slice(0,i)));
  for(let j=0;j<clauses.length;j++){const original=learningClause(clauses[j],[...candidates,...updatedCandidates,...(life.memories||[])]),summary=summarizeMemory(original);if(!summary)continue;const text=summary.text;if(text.length<6||text.length>300||/[?？]|我在想|我觉得|我好像|我似乎|我在生气|我在难过|如果|假如|要是|可能|也许|假设|希望他|他说|她说|今天.*(?:难过|开心|烦|累)|现在.*(?:难过|生气|烦|累)/.test(text))continue;
  if(!summary)continue;
  const sourceId=m.id||`${life.id}:legacy:${i}`;
@@ -130,4 +132,18 @@ function currentLearningPool(saved,updated,candidates){
  let rows=saved.map(m=>({...m}));
  for(const c of candidates)for(const edit of c.replacementEdits||[])rows=rows.flatMap(m=>m.id!==edit.id?[m]:edit.text?[{...m,text:edit.text}]:[]);
  return [...rows,...updated,...candidates].filter(m=>m.text);
+}
+
+// Resolve omitted subjects from explicit user learning statements, never from role speech.
+function learningContinuation(value,pool,history){
+ const text=value.trim().replace(/[。！]+$/,'');
+ const correction=text.match(/^(?:我)?(?:说错了|更正一下|更正)[，,:：\s]*(?:是|应该是)([^，,。；？?]{1,30})$/);
+ const active=[...new Set(pool.flatMap(m=>memoryParts(m.text)).filter(p=>p.startsWith('正在学习：')).map(p=>p.slice(5)))];
+ if(correction&&active.length===1)return ['我正在学习'+correction[1]+'，不是'+active[0]];
+ if(/^(?:现在|如今)?(?:我)?(?:两种|两个|两样)都(?:在)?学$/.test(text)){
+  const users=history.filter(m=>m.role==='user'&&!['pending','failed'].includes(m.status)&&m.kind!=='closing');
+  const last=users.at(-1);const c=last?.text?.trim().replace(/[。！]+$/,'').match(/^(?:我)?(?:说错了|更正一下|更正)[，,:：\s]*(?:是|应该是)([^，,。；？?]{1,30})(?:[，,]不是([^，,。；？?]{1,30}))?$/);
+  if(c){const previous=users.slice(0,-1).flatMap(m=>memoryClauses(m.text).map(summarizeMemory)).filter(x=>x?.text.startsWith('正在学习：')).at(-1)?.text.slice(5).replace(/。$/,'');const old=c[2]||previous;if(old&&old!==c[1])return ['我正在学习'+old,'我正在学习'+c[1]];}
+ }
+ return [value];
 }

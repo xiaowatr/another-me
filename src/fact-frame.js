@@ -1,3 +1,4 @@
+import {storyClock,beyondStoryEnd} from './story-clock.js';
 import {scenePhase} from './input-anchors.js';
 import {replacementIssues,durationIssues,placementIssues,relevantAnswer} from './consistency.js';
 ﻿import {coordinates} from './context.js';
@@ -37,7 +38,7 @@ export function inspectFactText(text,background,{frame='chat',anchorYear,memorie
    if(!reference)continue;
    const explicit=yearOf(sentence),recent=frame==='chat'&&/(刚|今年|最近|这几天|上周|昨天|今天|上个月|现在|这些年|每年都)/.test(sentence);
    const recurring=/(?:之后|后来|此后)?每年|每次放假|每逢.{0,5}假期/.test(sentence);
-   const when=explicit??(recent?now:frame==='story'?year:null);
+   const when=explicit??(recent?year:frame==='story'?year:null);
    const remembered=/(回忆|想起|那年|当年|梦里|照片里|怀念|祭|墓|遗像)/.test(sentence);
    const wish=/(希望|愿望|想以后|想明年|打算|我明年|说明年|说.*明年|如果|假如)/.test(sentence);
    const denied=/(?:没有|没再|不能|不可能|不会|不再|并未|不是|未曾)[^。！？]{0,20}(?:陪|一起|合影|拍照|过节|过中秋|工作|上课)/.test(sentence);
@@ -53,7 +54,7 @@ export function reviewStory(story,background,memories=[],{strictTime=false}={}){
   for(const clause of String(story.identity||'').split(/[。；，]/)){
    const match=clause.match(/(\d{1,3})岁/);if(!match)continue;
    const explicit=yearOf(clause),past=/那年|当时|暑假|夏天|回忆|曾经/.test(clause),present=/现在|如今|今年|此刻/.test(clause);
-   const anchor=explicit??(present?new Date().getFullYear():past?c.forkYear:new Date().getFullYear());
+   const anchor=explicit??(present?storyClock(background,story).year:past?c.forkYear:storyClock(background,story).year);
    if(anchor!=null&&Math.abs(Number(match[1])-(anchor-c.birthYear))>1)issues.push({field:'identity',reasons:[present?'wrong_present_age':'age_year_conflict']});
   }
  }
@@ -68,15 +69,16 @@ export function reviewStory(story,background,memories=[],{strictTime=false}={}){
   // Preserve the complete scene and its original label; never invent an anchor.
   if(risk.length)issues.push({field:'scenes.'+i,reasons:[...new Set(risk)]});else trusted.scenes.push({...scene,time:explicit||(lastYear!=null&&/同年|次年|翌年/.test(scene.time))?scene.time:`${lastYear?'约'+lastYear+'年':'年份未明确'} · ${scene.time}`});
  }
- const openingIssues=inspectFactText(story.opening,background,{frame:'chat',memories});
+ const openingIssues=inspectFactText(story.opening,background,{frame:'chat',memories,anchorYear:storyClock(background,story).year});
  if(openingIssues.length)issues.push({field:'opening',reasons:openingIssues});
  return {issues,trusted,openingSafe:!openingIssues.length};
 }
 export function currentOpening(story,background){
+ const end=storyClock(background,story);if(beyondStoryEnd(story.opening||'',end)&&!/如果|计划|打算|希望/.test(story.opening||''))return '我在这里。刚说完这段日子，你想从哪件事聊起？';
  if(story.openingVersion===2 && story.opening?.trim() && !inspectFactText(story.opening,background).length)return story.opening;
  const year=coordinates(background).forkYear;
  // A clearly current and consistent opening can be reused verbatim. Old openings stay in the story view.
  if(/现在|如今|此刻/.test(story.opening||'')&&!inspectFactText(story.opening,background).length&&!/今年暑假|今年夏天/.test(story.opening))return story.opening;
  return year?`我在这里。那条路已经走过来了，${year}年的事，可以慢慢说。`:'我在这里。那条路已经走过来了，你想从哪里聊起？';
 }
-export function sceneTimeLabel(time,background){if(/\d{4}年|同年|次年|翌年/.test(time))return time;return /年份未明确/.test(time)?time:`${time} · 年份未明确`;}
+export function sceneTimeLabel(time,background){if(scenePhase({time},background)==='future'&&!/未来设想/.test(time))return '未来设想 · '+time;if(/\d{4}年|同年|次年|翌年/.test(time))return time;return /年份未明确/.test(time)?time:`${time} · 年份未明确`;}
