@@ -95,7 +95,7 @@ export function completeReview(life,ids=life.candidates.filter(c=>!c.requiresCon
  let next=life;const accepted=[];
  for(const c of life.candidates.filter(c=>ids.includes(c.id))){
   if(!candidateHasUserSource(life,c)||c.sourceRole!=='user')throw Error('memory_source');
-  if(c.requiresConfirmation&&!c.confirmTargetId)throw Error('memory_confirmation_required');
+  if(c.requiresConfirmation&&c.confirmationKind!=='add'&&!c.confirmTargetId)throw Error('memory_confirmation_required');
   const operations=c.operations||candidateOperations(next,c);
   if(operations.some(o=>o.sourceId!==c.sourceId))throw Error('memory_source');
   next=applyMemoryOperations(next,{lifeId:life.id,operations});accepted.push(c.id);

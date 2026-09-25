@@ -1,23 +1,22 @@
 ﻿// Keyboard viewport and fixed-position boxes may move independently in mobile Safari.
 export function viewportBox(v,innerHeight){const height=Math.min(v?.height||innerHeight,innerHeight);return {height,top:Math.max(0,Math.min(v?.offsetTop||0,innerHeight-height))};}
-export function correctedChatTop(targetTop,actualTop,cssTop){return Number.isFinite(actualTop)?cssTop+targetTop-actualTop:targetTop;}
+
 export function watchChatViewport(win,root,onResize=()=>{}){
- let frame,timers=[],closed=false,lastHeight=null,positionTop=0;
+ let frame,timers=[],closed=false,lastHeight=null;
  const mobile=win.matchMedia('(max-width:760px)'),body=win.document.body,html=win.document.documentElement,scrollY=win.scrollY;
  const original={position:body.style.position,top:body.style.top,width:body.style.width,overflow:body.style.overflow,height:body.style.height};
  const originalHtml=html?{overflow:html.style.overflow,height:html.style.height,overscrollBehavior:html.style.overscrollBehavior}:null;
  let locked=false;
  const unlock=()=>{Object.assign(body.style,original);if(html)Object.assign(html.style,originalHtml);locked=false;};
- const lock=()=>{if(mobile.matches&&!locked){locked=true;Object.assign(body.style,{position:'fixed',top:'0px',width:'100%',overflow:'hidden',height:'100%'});if(html)Object.assign(html.style,{overflow:'hidden',height:'100%',overscrollBehavior:'none'});}else if(!mobile.matches&&locked)unlock();};
+ const lock=()=>{if(mobile.matches&&!locked){locked=true;Object.assign(body.style,{position:'static',top:'',width:'100%',overflow:'hidden',height:'100%'});if(html)Object.assign(html.style,{overflow:'hidden',height:'100%',overscrollBehavior:'none'});}else if(!mobile.matches&&locked)unlock();};
  const update=()=>{if(closed)return;win.cancelAnimationFrame(frame);frame=win.requestAnimationFrame(()=>{
   if(closed)return;const b=viewportBox(win.visualViewport,Math.max(win.innerHeight,html?.clientHeight||0));
   root.style.setProperty('--chat-viewport',b.height+'px');
-  const shell=mobile.matches?win.document.querySelector?.('.app-shell.in-chat'):null;
-  // Correct the actual rendered box, not an assumed Safari scroll offset. The
-  // correction is a delta, so repeated keyboard events cannot accumulate drift.
-  const actual=shell?.getBoundingClientRect().top;
-  positionTop=correctedChatTop(b.top,actual,positionTop);
-  root.style.setProperty('--chat-offset',positionTop+'px');
+
+  // Absolute shell uses document coordinates. No DOM measurement feeds back
+  // into its next position during Safari keyboard animation.
+  const pageTop=Number.isFinite(win.visualViewport?.pageTop)?win.visualViewport.pageTop:(win.scrollY||0)+b.top;
+  root.style.setProperty('--chat-offset',Math.max(0,pageTop)+'px');
   if(lastHeight!==b.height){lastHeight=b.height;onResize();}
  });};
  const settle=()=>{update();timers.forEach(clearTimeout);timers=[80,250,500].map(ms=>setTimeout(update,ms));};

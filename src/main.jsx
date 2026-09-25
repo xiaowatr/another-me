@@ -1,4 +1,4 @@
-import {memoryInput,acceptMemoryResult} from './model-memory.js';
+import {memoryInput,acceptMemoryResult,retryMemoryJob} from './model-memory.js';
 import {persistLifeChange} from './life-store.js';
 import {ageFieldErrors} from './age-validation.js';
 import {publicQuestion} from './public-question.js';
@@ -107,7 +107,7 @@ function App() {
   function returnLives(){setEditingProfile(false);setAboutOpen(false);setPage('lives');}
   async function newLife(){if(generation.current){generation.current.abort();generation.current=null;}if(pendingStory()){try{await experience.cancelStory();}catch(e){setError(e.message);return;}}resetStoryOperation();setFailureId('');setFollowupOpen(false);setShowAgeErrors(false);setStoryRetrying(false);setStoryRecovering(false);setWaitingNote([]);setBusy(false);requestLock.current=false;setBackground(b=>({...b,clarificationAppliedAnswer:'',followupKey:'',followupQuestion:'',followupAnswer:'',followupSkipped:''}));setFormOrigin('lives');setError('');setGenerationFailed(false);setSyncFailed(false);setClearedDraft(null);setTiming(null);setDetailsOpen(false);setSavedNotice('');setEditingProfile(false);setQuestion('');setClarification('');setPage('input');}
   function deleteLife(id){if(requestLock.current)return;reviewJobs.current.delete(id);const all=libraryRef.current.filter(l=>l.id!==id);libraryRef.current=all;setLibrary(all);if(lifeId===id){live.current=null;setLifeId(null);setStory(null);setMessages([]);setCandidates([]);setMemories([]);setSessionMeta(emptyReview());}const okay=writeLives(draftStorage(),{activeId:lifeId===id?null:lifeId,lives:all});setLifeStorageOkay(okay&&removeLifeBackup(draftStorage(),id));setPage('lives');}
-  async function endChat(){const id=lifeId;if(reviewJobs.current.has(id))return;reviewJobs.current.add(id);experience.memoryDiagnostic({stage:'end_clicked',totalMessages:live.current?.messages.length||0});setWrapWorkingId(id);setAboutOpen(false);const t=activeTurn.current;
+  async function endChat(retry=false){retry=retry===true;const id=lifeId;if(reviewJobs.current.has(id))return;reviewJobs.current.add(id);experience.memoryDiagnostic({stage:'end_clicked',totalMessages:live.current?.messages.length||0});setWrapWorkingId(id);setAboutOpen(false);const t=activeTurn.current;
     try{
       if(t){await stopReply();await t.finished;await new Promise(resolve=>setTimeout(resolve,0));}
       const saved=mutateLife(id,l=>page==='chat'?closeConversation(l):l);
@@ -119,6 +119,8 @@ function App() {
       if(!data.messages.length){experience.memoryDiagnostic({stage:data.blocked?'pending_message':'no_new_messages'});setSavedNotice(data.blocked?'聊天已保存，还有消息未完成，记忆整理未完成。':'聊天已保存，下次接着聊');return;}
       const old=saved.next.sessionMeta?.memoryJob;
       let job=old&&old.status!=='complete'&&JSON.stringify(old.input.messages.map(m=>m.id))===JSON.stringify(data.messages.map(m=>m.id))?old:null;
+      if(retry&&(!job||!['invalid_response','task_expired'].includes(job.error)||(job.retryUsed||job.attempt||0)>=1)){setSavedNotice('本批次不能再次重新整理，请保留聊天和待确认内容。');return;}
+      if(retry){const state=await experience.status();job=retryMemoryJob(job,state.instanceId,crypto.randomUUID());}
       if(!job){
         const state=await experience.status();
         const ready=mutateLife(id,l=>{const input=memoryInput(l);job={id:crypto.randomUUID(),instanceId:state.instanceId,input,expectedRevision:(l.memoryRevision||0)+1,status:'pending'};return {...l,sessionMeta:{...l.sessionMeta,memoryJob:job,review:{status:'pending',end:input.end}}};});
@@ -126,10 +128,11 @@ function App() {
       }else{
         // Ending again does not itself edit memory; keep the task tied to the current revision.
         const unchanged=JSON.stringify(job.input.memories)===JSON.stringify(memoryInput(saved.next).memories);
+        if(!unchanged){setSavedNotice('记忆已被修改，旧整理结果不能覆盖这些修改。聊天已保留。');return;}
         if(unchanged){const ready=mutateLife(id,l=>{job={...job,expectedRevision:(l.memoryRevision||0)+1};return {...l,sessionMeta:{...l.sessionMeta,memoryJob:job}};});if(!ready?.okay)return;}
       }
       experience.memoryDiagnostic({stage:'request_sent',batchId:job.id});
-      const result=await experience.extractMemory({batchId:job.id,instanceId:job.instanceId,data:job.input});
+      const result=await experience.extractMemory({batchId:job.id,instanceId:job.instanceId,data:job.input,attempt:job.attempt||0});
       const done=mutateLife(id,l=>acceptMemoryResult(l,job,result));
       experience.memoryDiagnostic({stage:done?.okay?'persisted':'failed',batchId:job.id,modelRequestId:result.requestId,operations:result.operations.length});
       if(done?.okay)setSavedNotice(done.next.sessionMeta.memoryOutcome==='confirmation'?'聊天已保存，有记忆更新需要确认。':done.next.sessionMeta.memoryOutcome==='changed'?'聊天已保存，记忆已更新。':'聊天已保存，记忆没有变化。');
@@ -282,7 +285,7 @@ function App() {
           if(draft.length-(end-start)>=2000)return;
           setDraft(draft.slice(0,start)+'\n'+draft.slice(end));requestAnimationFrame(()=>{input.selectionStart=input.selectionEnd=start+1;});
         }} value={draft} onChange={e => setDraft(e.target.value)} placeholder="写给另一个自己……" rows={1} maxLength={2000}/><button className="primary" disabled={!draft.trim() || busy || wrapWorkingId===lifeId}>{busy ? '正在回信…' : '发送'} <span>↑</span></button></form>{error && <div role="alert" className="error"><p>{error}</p>{failureId&&<label>请求ID（可选中复制）<input readOnly value={failureId} onFocus={e=>e.target.select()}/></label>}</div>}<p className="small">Enter 发送 · Ctrl＋Enter 换行</p></section>}
-      {page==='chat' && <AboutMe open={aboutOpen} onClose={()=>setAboutOpen(false)}><button type="button" className="text-button" disabled={busy} onClick={()=>{setAboutOpen(false);setEditingProfile(true);setFormOrigin('chat');setBackground(migrateBackground(generatedBackground));setPage('input');}}>修改故事背景</button>        <label className="field">MBTI（选填）<select disabled={busy} value={generatedBackground.mbti || ''} onChange={e=>{setGeneratedBackground({...generatedBackground,mbti:e.target.value});setContextStart(messages.length);setSavedNotice('已保存');}}><option value="">不填写</option><option value="unknown">不确定</option>{MBTI_TYPES.map(t=><option key={t}>{t}</option>)}</select></label><p className="small">以你亲口说的为准，类型只是参考。</p>{sessionMeta.review?.status==='failed'&&<button className="text-button" onClick={endChat}>恢复整理结果</button>}<button type="button" className="text-button" disabled={busy||wrapWorkingId===lifeId} onClick={endChat}>整理尚未处理的聊天</button><MemoryPanel messages={messages} memories={memories} candidates={candidates} onCandidates={changeCandidates} onMemories={changeMemories} onConfirm={ids=>mutateLife(lifeId,l=>completeReview(l,ids))} onSaved={()=>setSavedNotice('已保存')} disabled={busy}/>{savedNotice && <p role="status">{savedNotice}</p>}</AboutMe>}
+      {page==='chat' && <AboutMe open={aboutOpen} onClose={()=>setAboutOpen(false)}><button type="button" className="text-button" disabled={busy} onClick={()=>{setAboutOpen(false);setEditingProfile(true);setFormOrigin('chat');setBackground(migrateBackground(generatedBackground));setPage('input');}}>修改故事背景</button>        <label className="field">MBTI（选填）<select disabled={busy} value={generatedBackground.mbti || ''} onChange={e=>{setGeneratedBackground({...generatedBackground,mbti:e.target.value});setContextStart(messages.length);setSavedNotice('已保存');}}><option value="">不填写</option><option value="unknown">不确定</option>{MBTI_TYPES.map(t=><option key={t}>{t}</option>)}</select></label><p className="small">以你亲口说的为准，类型只是参考。</p>{sessionMeta.review?.status==='failed'&&['invalid_response','task_expired'].includes(sessionMeta.memoryJob?.error)&&!((sessionMeta.memoryJob?.retryUsed||sessionMeta.memoryJob?.attempt||0)>=1)&&<button className="text-button" disabled={wrapWorkingId===lifeId} onClick={()=>endChat(true)}>重新整理一次（会调用模型）</button>}{sessionMeta.review?.status==='failed'&&<button className="text-button" onClick={endChat}>恢复整理结果</button>}<button type="button" className="text-button" disabled={busy||wrapWorkingId===lifeId} onClick={endChat}>整理尚未处理的聊天</button><MemoryPanel messages={messages} memories={memories} candidates={candidates} onCandidates={changeCandidates} onMemories={changeMemories} onConfirm={ids=>mutateLife(lifeId,l=>completeReview(l,ids))} onSaved={()=>setSavedNotice('已保存')} disabled={busy}/>{savedNotice && <p role="status">{savedNotice}</p>}</AboutMe>}
       {busy && generation.current && page==='input' && <PostalWaiting recovering={storyRecovering} settingNote={waitingNote} onCancel={cancelGeneration} retrying={storyRetrying}/>}
     </main><footer><span>another me <span className="footer-dot">·</span> 另一种人生，依然是你</span><span>每条路，都有自己的光。 <span>✧</span></span></footer>
   </fieldset></div>;

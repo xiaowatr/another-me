@@ -7,7 +7,7 @@ export function applyMemoryOperations(life,batch){
  for(const op of batch.operations){
   if(applied.has(op.id))continue;
   const source=life.messages.find((m,i)=>(m.id||life.id+':legacy:'+i)===op.sourceId);
-  if(!source||source.role!=='user'||source.kind==='closing'||['pending','failed'].includes(source.status)||!op.id||!['add','update','revoke'].includes(op.kind))throw Error('memory_source');
+  if(!source||source.role!=='user'||source.kind==='closing'||source.status==='pending'||!op.id||!['add','update','revoke'].includes(op.kind))throw Error('memory_source');
   if(op.subject&&op.subject!=='user')throw Error('memory_subject');
   const index=rows.findIndex(m=>m.id===op.targetId),before=rows[index];
   if(op.kind!=='add'&&(!before||before.text!==op.expectedText))throw Error('memory_stale_target');
@@ -27,7 +27,8 @@ export function applyMemoryOperations(life,batch){
 export function candidateOperations(life,c){
  const base={sourceId:c.sourceId,type:c.type},operations=[];
  for(const [i,e] of (c.replacementEdits||[]).entries())operations.push({...base,id:c.id+':edit:'+i,kind:e.text?'update':'revoke',targetId:e.id,expectedText:e.previousText,text:e.text});
- if(c.confirmTargetId){const target=life.memories.find(m=>m.id===c.confirmTargetId);if(!target)throw Error('memory_stale_target');return [{...base,id:c.id+':confirmed',kind:'update',targetId:target.id,expectedText:target.text,text:c.text}];}
+ if(c.origin==='model'&&c.requiresConfirmation&&c.confirmationKind==='add')return [{...base,id:c.id+':confirmed',kind:'add',targetId:c.id,text:c.text}];
+ if(c.confirmTargetId){const target=life.memories.find(m=>m.id===c.confirmTargetId);if(!target)throw Error('memory_stale_target');if(c.expectedText!==undefined&&c.expectedText!==target.text)throw Error('memory_stale_target');return [{...base,id:c.id+':confirmed',kind:c.confirmationKind==='revoke'?'revoke':'update',targetId:target.id,expectedText:target.text,text:c.text}];}
  // A one-to-one replacement updates the original card rather than deleting and adding.
  if(operations.length===1&&operations[0].kind==='revoke')return [{...operations[0],kind:'update',text:c.text}];
  if(!life.memories.some(m=>m.text===c.text&&!operations.some(o=>o.targetId===m.id)))operations.push({...base,id:c.id+':add',kind:'add',targetId:c.id,text:c.text});

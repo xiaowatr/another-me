@@ -38,3 +38,5 @@ tests/*
 !tests/mobile58.test.js
 
 !tests/task59.test.js
+
+!tests/memory60.test.js

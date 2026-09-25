@@ -14,8 +14,13 @@ export function acceptMemoryResult(life,job,result){
  if(result.lifeId!==life.id||result.batchId!==job.id)throw Error('memory_owner');
  const sourceIds=new Set(job.input.messages.map(m=>m.id));
  if(result.operations.some(o=>!sourceIds.has(o.sourceId)))throw Error('memory_source');
- const pending=result.operations.filter(o=>o.needsConfirmation).map(o=>({id:o.id,type:o.type||'reality',text:o.text||'请填写更正后的内容',sourceId:o.sourceId,sourceText:job.input.messages.find(m=>m.id===o.sourceId).text,sourceRole:'user',requiresConfirmation:true,origin:'model'}));
+ const pending=result.operations.filter(o=>o.needsConfirmation).map(o=>({id:o.id,type:o.type||'reality',text:o.text||'请填写更正后的内容',sourceId:o.sourceId,sourceText:job.input.messages.find(m=>m.id===o.sourceId).text,sourceRole:'user',requiresConfirmation:true,confirmationKind:o.kind,confirmTargetId:o.targetId||'',expectedText:o.expectedText,origin:'model'}));
  const applied=applyMemoryOperations(life,{lifeId:life.id,operations:result.operations.filter(o=>!o.needsConfirmation)});
  const next=reviseMemories({...life,sessionMeta:applied.sessionMeta},applied.memories);
  return {...next,candidates:[...next.candidates,...pending],sessionMeta:{...next.sessionMeta,organizedUntil:job.input.end,roundStart:job.input.end,memoryJob:{...job,status:'complete',requestId:result.requestId},review:{status:'complete',end:job.input.end},memoryOutcome:pending.length?'confirmation':applied.sessionMeta.memoryOutcome}};
+}
+
+export function retryMemoryJob(job,instanceId,newId){
+ if(!job||!['invalid_response','task_expired'].includes(job.error)||(job.retryUsed||job.attempt||0)>=1)throw Error('memory_retry_exhausted');
+ return {...job,...(job.instanceId!==instanceId?{id:newId,instanceId,attempt:0}:{attempt:1}),retryUsed:1,status:'pending'};
 }
