@@ -49,7 +49,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       const memories=data.memories.filter(m=>m.sourceRole!=='assistant'||m.type==='fiction').map(m=>{if(!['reality','preference','fiction'].includes(m.type)||typeof m.text!=='string'||!m.text.trim()||m.text.length>1000)throw new AppError('input');return {id:String(m.id).slice(0,80),type:m.type,text:m.text,sourceYear:Number.isInteger(m.sourceYear)?m.sourceYear:null};});
       const id=randomUUID();if(input.previousSessionId&&sessions.get(input.previousSessionId)?.owner===currentOwner())sessions.delete(input.previousSessionId);
       if(sessions.size>=20)sessions.delete(sessions.keys().next().value);
-      const restoredCorrections=Array.isArray(data.corrections)?data.corrections.filter(c=>['reality','fiction','identity','chat_time'].includes(c.type)&&typeof c.text==='string'&&c.text.length<=2000).slice(-20):[];
+      const restoredCorrections=Array.isArray(data.corrections)?data.corrections.filter(c=>['reality','fiction','identity','chat_time','event_order'].includes(c.type)&&typeof c.text==='string'&&c.text.length<=2000).slice(-20):[];
       const roleRecords=Array.isArray(data.roleRecords)?data.roleRecords.filter(r=>['statement','plan','uncertain'].includes(r.kind)&&typeof r.text==='string'&&r.text.length<=600&&!historyRisk(r.text,background,memories)).slice(-300).map(r=>({sourceId:String(r.sourceId||'').slice(0,120),kind:r.kind,text:r.text})):[];
       sessions.set(id,{owner:currentOwner(),background,story,history,memories,roleRecords,corrections:restoredCorrections,updated:Date.now()});
       return {sessionId:id,mode:config.mode};

@@ -7,10 +7,12 @@ export function inventedRelationship(text,evidence,source){return isIdentityCorr
 // Only remove an explicit opening vocative anchored as a third person in input.
 // This does not rewrite story scenes or claim general name/entity recognition.
 export function safeOpeningAddress(opening,background={}){
- const value=String(opening||''),m=/^\s*([^，,：:！!。\n]{1,20})[，,：:]\s*(?=我|你|今天|最近|刚)/.exec(value);
+ const value=safeOpeningHistory(opening),m=/^\s*([^，,：:！!。\n]{1,20})[，,：:]\s*(?=我|你|今天|最近|刚)/.exec(value);
  if(!m)return value;
  const address=m[1].trim(),source=[background.realityOutcome,background.hypotheticalDirection,background.details].filter(Boolean).join('。');
  const parts=source.split(/朋友|同事|同学|邻居|亲戚/).slice(1);
  if(!parts.some(p=>p.replace(/^(?:名叫|叫做|叫|是)?[“「\s]*/,'').startsWith(address)))return value;
  return value.slice(m[0].length).trim()||'我在这里，你想从哪件事聊起？';
 }
+
+export function safeOpeningHistory(opening){const text=String(opening||'');return /你(?:最近|刚才|之前|以前|曾经|上次|前几天)?(?:问|说|提起|告诉)(?:过)?(?:我|我们)|我们(?:之前|上次|刚才)(?:聊|说|谈)|今天我们就聊到这/.test(text)?'刚经历完这段日子，我想跟你聊聊。你想从哪件事说起？':text;}

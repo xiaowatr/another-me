@@ -9,7 +9,9 @@ export function timeAnchors(b,now=new Date()){
 }
 export function futureScenario(b,a=timeAnchors(b)){const start=a.start,year=a.currentYear||Number(a.asOf?.slice(0,4)),month=a.currentMonth||Number(a.asOf?.slice(5,7));return Boolean(start&&(start.year>year||start.year===year&&start.month>month)||!start&&/未来.*(?:设想|探索|可能)|从现在起未来/.test(b.hypotheticalDirection||''));}
 export function scenePhase(scene,b){const a=timeAnchors(b),d=dateParts(scene.time)[0];if(/回忆|此前|回顾/.test(scene.time||''))return 'memory';if(!d&&futureScenario(b,a))return 'future';return /未来|设想|可能情景|计划/.test(scene.time||'')||d&&(d.year>a.currentYear||d.year===a.currentYear&&d.month>a.currentMonth)?'future':/回忆|此前|回顾/.test(scene.time||'')?'memory':'past';}
-export function temporalIssues(story,b,compiledTemporal){const a=compiledTemporal||timeAnchors(b),out=[];for(const [i,s] of (story.scenes||[]).entries()){
+export function temporalIssues(story,b,compiledTemporal){const a=compiledTemporal||timeAnchors(b),out=[];
+ if(a.window?.anchor==='explicit-observation')for(const [field,text] of [...['intro','character','opening'].map(k=>[k,story[k]||'']),...(story.scenes||[]).map((s,i)=>['scenes.'+i,s.text||''])])for(const clause of String(text).split(/[。！？；\n]/)){if(/如果|计划|打算|回忆|曾经/.test(clause))continue;for(const m of clause.matchAll(/(?:这|整个这|总共|一共)([一二两三四五六七八九十0-9]+)个月/g)){const n=smallNumber(m[1]);if(n>a.window.months)out.push({field,reason:'observation_duration_conflict'});}}
+for(const [i,s] of (story.scenes||[]).entries()){
  const label=dateParts(s.time)[0];
  const rawMonths=a.observationRange?.match(/([0-9一二两三四五六七八九十]+)个月/)?.[1],months=rawMonths?(Number(rawMonths)||({'一':1,'二':2,'两':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'十':10}[rawMonths])):null;
  const w=a.window;out.push(...preciseWindowIssues(s,w,label,i));const outside=d=>w?.start&&w?.end&&d&&(d.year<w.start.year||d.year>w.end.year||(d.month&&w.start.month&&d.year*12+d.month<w.start.year*12+w.start.month)||(d.month&&w.end.month&&d.year*12+d.month>w.end.year*12+w.end.month));
@@ -56,10 +58,11 @@ export function roleGender(b){const change=(b.hypotheticalDirection||'').match(/
 export function applyClarification(b){
  b={...b};for(const field of ['realityOutcome','hypotheticalDirection']){const text=b[field]||'',matches=[...text.matchAll(/(?:更正|纠正|之前说错了)[：，,]\s*(?=我)/g)];if(matches.length){const last=matches.at(-1);b[field]=text.slice(last.index+last[0].length);}}
  const next={...b},answer=b.followupSkipped?'':b.followupAnswer||'';
- if(b.followupKey!=='hard-conflict'||!answer.trim()||b.clarificationAppliedAnswer===answer)return next;
+ if(!answer.trim()||b.clarificationAppliedAnswer===answer)return next;
+ if(b.followupKey!=='hard-conflict'&&!/(?:^|[，,；;。\n])\s*(?:现实|假设)(?:中)?[：:]?/.test(answer))return next;
  // Only explicit answer labels authorize replacing a world-specific assertion.
  const extract=label=>answer.match(new RegExp('(?:^|[，,；;。\\n])\\s*'+label+'(?:中)?[：:]?\\s*([^；;。\\n]+?)(?=[，,]\\s*(?:现实|假设)|$|[；;。\\n])'))?.[1]?.trim();
- const real=extract('现实'),imagined=extract('假设');
+ const real=extract('现实'),imagined=extract('假设')?.replace(/^是/, '');
  const age=answer.match(/(?:年龄[：:]?|当时(?:是)?|\d{4}年)\s*(\d{1,3})岁/)||answer.trim().match(/^(\d{1,3})岁$/);
  const year=answer.match(/((?:18|19|20|21)\d{2})年/);
  if(real||imagined||age)next.clarificationOriginal=b.clarificationOriginal||JSON.stringify({realityOutcome:b.realityOutcome,hypotheticalDirection:b.hypotheticalDirection,forkAge:b.forkAge});
@@ -74,7 +77,7 @@ export function hardQuestion(b){const conflicts=hardConflicts(applyClarification
 
 const smallNumber=s=>/^\d+$/.test(s)?Number(s):({'一':1,'二':2,'两':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'十':10}[s]??null);
 export function observationWindow(b,fork,now=new Date()){
- for(const field of ['hypotheticalDirection','details','followupAnswer']){if(field==='followupAnswer'&&b.followupSkipped)continue;const text=b[field]||'',m=text.match(/(?:观察|只看|只写)[：:]?\s*((?:18|19|20|21)\d{2})年(\d{1,2})(?:月)?(?:—|–|-|至|到|和)(\d{1,2})月/);if(m&&+m[2]>=1&&+m[3]<=12&&+m[3]>=+m[2])return {months:+m[3]-+m[2]+1,anchor:'explicit-observation',start:{year:+m[1],month:+m[2]},end:{year:+m[1],month:+m[3]},precision:'month',sources:[{field,text:m[0]}]};}
+ for(const field of ['followupAnswer','details','hypotheticalDirection']){if(field==='followupAnswer'&&b.followupSkipped)continue;const text=b[field]||'',m=text.match(/(?:观察|只看|只写|看看|就看|看)[：:]?\s*((?:18|19|20|21)\d{2})年(\d{1,2})(?:月)?(?:—|–|-|至|到|和|、)(\d{1,2})月/);if(m&&+m[2]>=1&&+m[3]<=12&&+m[3]>=+m[2])return {months:+m[3]-+m[2]+1,anchor:'explicit-observation',start:{year:+m[1],month:+m[2]},end:{year:+m[1],month:+m[3]},precision:'month',sources:[{field,text:m[0]}]};}
 
  const sources=['hypotheticalDirection','details','followupAnswer'].filter(f=>f!=='followupAnswer'||!b.followupSkipped).flatMap(field=>String(b[field]||'').split(/[。；\n]/).flatMap(text=>{
  const normalized=text.replace(/半年/g,'六个月');const m=normalized.match(/(?:未来|接下来|之后|随后|以后|只写|只看|仅写|仅看|观察|从现在起|从今天起|从当年|从那次|从(?:19|20)\d{2}年)[^。；]{0,35}?([0-9一二两三四五六七八九十]+)个月/);

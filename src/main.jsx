@@ -134,7 +134,7 @@ function App() {
       experience.memoryDiagnostic({stage:'request_sent',batchId:job.id});
       const result=await experience.extractMemory({batchId:job.id,instanceId:job.instanceId,data:job.input,attempt:job.attempt||0});
       const done=mutateLife(id,l=>acceptMemoryResult(l,job,result));
-      experience.memoryDiagnostic({stage:done?.okay?'persisted':'failed',batchId:job.id,modelRequestId:result.requestId,operations:result.operations.length});
+      experience.memoryDiagnostic({stage:done?.okay?'persisted':'failed',batchId:job.id,modelRequestId:result.requestId,operations:result.operations.length,...(done?.okay?{savedMemories:done.next.memories.length,pendingCandidates:done.next.candidates.length,outcome:done.next.sessionMeta.memoryOutcome}:{})});
       if(done?.okay)setSavedNotice(done.next.sessionMeta.memoryOutcome==='confirmation'?'聊天已保存，有记忆更新需要确认。':done.next.sessionMeta.memoryOutcome==='changed'?'聊天已保存，记忆已更新。':'聊天已保存，记忆没有变化。');
       else setSavedNotice('聊天已保存，记忆整理未完成。请保留页面，稍后恢复整理结果。');
     }catch(e){experience.memoryDiagnostic({stage:'failed',modelRequestId:e.requestId});mutateLife(id,l=>({...l,sessionMeta:{...l.sessionMeta,memoryJob:l.sessionMeta?.memoryJob?{...l.sessionMeta.memoryJob,status:'failed',requestId:e.requestId||l.sessionMeta.memoryJob.requestId,error:e.category||'memory_processing'}:null,review:{...l.sessionMeta?.review,status:'failed'}}}));setSavedNotice('聊天已保存，记忆整理未完成。可在资料与记忆中恢复整理结果。');}

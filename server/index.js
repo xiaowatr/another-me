@@ -61,7 +61,7 @@ const server = http.createServer(async (req, res) => {
       if(pathname==='/api/memory/extract'){
         const log=record=>{if(process.env.REQUEST_DIAGNOSTICS!=='0')console.info(JSON.stringify({type:'memory_request_diagnostic',task:'memory',requestId,codeVersion:app.status().version,...record}));};
         log({stage:'received',batchId:/^[a-f0-9-]{36}$/.test(input.batchId||'')?input.batchId:null});
-        try{const result=await withOwner(owner,()=>memoryTasks.submit(owner,input));log({stage:'returned',operations:result.operations.length,modelRequestId:result.requestId||null,durationMs:Date.now()-receivedAt});return json(res,200,result);}
+        try{const result=await withOwner(owner,()=>memoryTasks.submit(owner,input));log({stage:'returned',operations:result.operations.length,summary:result.summary||null,modelRequestId:result.requestId||null,durationMs:Date.now()-receivedAt});return json(res,200,result);}
         catch(e){log({stage:'failed',category:e.category||'upstream',durationMs:Date.now()-receivedAt});throw e;}
       }
       if(pathname === '/api/session/restore')return json(res,200,withOwner(owner,()=>app.restore(input)));

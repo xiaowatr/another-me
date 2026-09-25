@@ -79,7 +79,7 @@ export function currentOpening(story,background){
  if(story.openingVersion===2 && story.opening?.trim() && !inspectFactText(story.opening,background).length)return safeOpeningAddress(story.opening,background);
  const year=coordinates(background).forkYear;
  // A clearly current and consistent opening can be reused verbatim. Old openings stay in the story view.
- if(/现在|如今|此刻/.test(story.opening||'')&&!inspectFactText(story.opening,background).length&&!/今年暑假|今年夏天/.test(story.opening))return story.opening;
+ if(/现在|如今|此刻/.test(story.opening||'')&&!inspectFactText(story.opening,background).length&&!/今年暑假|今年夏天/.test(story.opening))return safeOpeningAddress(story.opening,background);
  return year?`我在这里。那条路已经走过来了，${year}年的事，可以慢慢说。`:'我在这里。那条路已经走过来了，你想从哪里聊起？';
 }
 export function sceneTimeLabel(time,background){if(scenePhase({time},background)==='future'&&!/未来设想/.test(time))return '未来设想 · '+time;if(/\d{4}年|同年|次年|翌年/.test(time))return time;return /年份未明确/.test(time)?time:`${time} · 年份未明确`;}
