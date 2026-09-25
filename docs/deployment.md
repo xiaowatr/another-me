@@ -117,3 +117,8 @@ cd "C:\Users\小水\Desktop\职场小水\another me"
 
 ### v51 发布前浏览器验收
 独立演示origin实际点击三轮记忆结束保存、刷新和手动确认替换通过；修正已有学习表达的省略形式，不增加主题词表。版本2026-09-25.v51-local，Prompt v27/M3不变。历史测试分类见本机台账，未宣称全套通过。提交当前已审核src/server、公开合成测试与部署说明，推送main后Render Deploy latest commit；环境变量无需新增。更新不会清空浏览器存档，线上尚未发布。
+
+### v52 独立模型记忆提取（本地已启用，未发布）
+结束聊天实际使用 POST /api/memory/extract，一批新用户消息至多一次模型调用；已有保存、来源与版本保护不变。前后端必须一起发布。独立环境变量（不填写时也有相同默认值）：MINIMAX_MEMORY_MODEL=MiniMax-M3、MINIMAX_MEMORY_THINKING=disabled、MINIMAX_MEMORY_MAX_TOKENS=2000；沿用服务端已有MINIMAX_API_KEY和站点地址，不增加前端密钥。故事/聊天参数和并发上限不变。
+12项定向离线检查和构建通过；有限真实提取6次中5次通过、1次结构/来源校验失败，不能宣称通用提取稳定。失败不更新旧记忆/处理位置，提示聊天已保存、记忆整理未完成；同进程可恢复缓存结果，不自动重试已失败模型请求。任务不能跨服务重启恢复，空闲时部署。版本2026-09-25.v52-local，故事Prompt v27不变，独立记忆Prompt memory-v1。
+审核 .env.example/.gitignore/src/server/tests/model-memory52.test.js/本说明后提交现有关联分支；勿提交.env、.local、私密台账、测试输出或无关目录。沿用Build npm ci && npm run build，Start npm start；推送后Render部署最新Commit，核对/api/status版本并刷新前端。未自动推送或部署，浏览器历史无需清空。

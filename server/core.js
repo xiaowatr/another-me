@@ -53,6 +53,7 @@ export function parseResult(content, task, diagnostic = {}) {
   try { try{strictJson(content);}catch(e){if(e.message.startsWith('duplicate_field:'))throw new AppError('invalid_response',502,{stage:'schema',reason:'duplicate_field'});} data = decodeJson(content,diagnostic); }
   catch(e) { throw new AppError('invalid_response', 502, e.diagnostic || {stage:'parse',reason:'json_syntax'}); }
   if (!data || typeof data !== 'object' || Array.isArray(data)) throw new AppError('invalid_response', 502,{stage:'schema',reason:'object_required'});
+  if(task==='memory'){if(!Array.isArray(data.operations))throw new AppError('invalid_response',502);return data;}
   if(task==='review'){if(!Array.isArray(data.checks))throw new AppError('invalid_response',502,{stage:'review',reason:'missing_review'});return data;}
   if (task === 'chat') {
     if (!str(data.reply, 2500) || !['none', 'reality', 'fiction'].includes(data.updateType)) throw new AppError('invalid_response', 502);
@@ -102,7 +103,8 @@ export function loadConfig(env) {
   const valid = allowed[site]?.includes(base) && /^MiniMax-[\w.-]+$/.test(model);
   const storyThinking=env.MINIMAX_STORY_THINKING||'disabled';if(!['disabled','adaptive'].includes(storyThinking))throw new Error('MINIMAX_STORY_THINKING只能为disabled或adaptive');
   const maxConcurrent=Number(env.MODEL_MAX_CONCURRENT||3);if(!Number.isInteger(maxConcurrent)||maxConcurrent<1||maxConcurrent>5)throw new Error('MODEL_MAX_CONCURRENT须为1至5的整数');
-  return { key, site, base, model, storyThinking,maxConcurrent, mode: key ? valid ? 'real' : 'configuration' : 'demo' };
+  const memoryModel=env.MINIMAX_MEMORY_MODEL||'MiniMax-M3';const memoryMaxTokens=Number(env.MINIMAX_MEMORY_MAX_TOKENS||2000);const memoryThinking=env.MINIMAX_MEMORY_THINKING||'disabled';if(!/^MiniMax-[\w.-]+$/.test(memoryModel)||memoryThinking!=='disabled'||!Number.isInteger(memoryMaxTokens)||memoryMaxTokens<256||memoryMaxTokens>2000)throw Error('Invalid memory configuration');
+  return { key, site, base, model, memoryModel,memoryMaxTokens,memoryThinking, storyThinking,maxConcurrent, mode: key ? valid ? 'real' : 'configuration' : 'demo' };
 }
 
 // 仅记录预先允许的字段类型与长度，不记录模型原文或字段值。

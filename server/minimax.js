@@ -15,8 +15,9 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
   const emit=record=>{if(env.REQUEST_DIAGNOSTICS!=='0')log(JSON.stringify({type:'model_diagnostic',...record}));};
   const auditPath = path.join(directory, 'requests.jsonl');
   async function call(task, messages, options = {}) {
-    const trace=activeStoryTrace();const started = Date.now();
-    const record = { operationId:trace?.record.operationId||null,parentTaskId:trace?.record.parentTaskId||null,attempt:trace?.record.attempt||null,codeVersion:CODE_VERSION,actualModel:null,failureStage:null,failureReason:null,requestedRange:options.diagnosticRange||null, requestId: randomUUID(), time: new Date().toISOString(), task, model: config.model, promptVersion: PROMPT_VERSION, durationMs: 0, success: false, errorCategory: null, inputTokens: null, outputTokens: null, totalTokens: null, sent: false, site:config.site, usageSource:null, cachedTokens:null, auditGroup:options.auditGroup || null, status:'pending',parentRequestId:options.parentRequestId||null };
+    const model=task==='memory'?(config.memoryModel||'MiniMax-M3'):config.model;const trace=activeStoryTrace();const started = Date.now();
+    const record = { operationId:trace?.record.operationId||null,parentTaskId:trace?.record.parentTaskId||null,attempt:trace?.record.attempt||null,codeVersion:CODE_VERSION,actualModel:null,failureStage:null,failureReason:null,requestedRange:options.diagnosticRange||null, requestId: randomUUID(), time: new Date().toISOString(), task, model, promptVersion: task==='memory'?'memory-v1':PROMPT_VERSION, durationMs: 0, success: false, errorCategory: null, inputTokens: null, outputTokens: null, totalTokens: null, sent: false, site:config.site, usageSource:null, cachedTokens:null, auditGroup:options.auditGroup || null, status:'pending',parentRequestId:options.parentRequestId||null };
+    if(task==='memory')record.memoryBatchId=options.memoryBatchId||null;
     let phaseStart=started;record.phaseMs={};const stage=name=>{if(record.stage)record.phaseMs[record.stage]=(record.phaseMs[record.stage]||0)+Date.now()-phaseStart;record.stage=name;phaseStart=Date.now();};
     if(options.diagnosticClock){const c=options.diagnosticClock;record.clock={asOf:/^\d{4}-\d{2}-\d{2}$/.test(c.asOf)?c.asOf:null,startYear:Number.isInteger(c.startYear)?c.startYear:null,startMonth:Number.isInteger(c.startMonth)?c.startMonth:null};}
     record.build={commit:/^[a-f0-9]{40}$/.test(process.env.RENDER_GIT_COMMIT||'')?process.env.RENDER_GIT_COMMIT:null};
@@ -28,13 +29,13 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       options.onStart?.(record.requestId);
       record.sent = true;trace?.modelStart(record.requestId,config.model,task);
       fs.appendFileSync(auditPath,JSON.stringify(record)+'\n');emit(record);
-      record.thinking=task==='story'?(config.storyThinking||'disabled'):'unchanged';
-      record.maxCompletionTokens=task==='story'?6000:3500;
+      record.thinking=task==='memory'?'disabled':task==='story'?(config.storyThinking||'disabled'):'unchanged';
+      record.maxCompletionTokens=task==='memory'?(config.memoryMaxTokens||2000):task==='story'?6000:3500;
       stage('transport');
       const response = await fetchImpl(`${config.base}/chat/completions`, {
         method: 'POST', redirect: 'error',
         headers: { 'Authorization': `Bearer ${config.key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: config.model, messages, ...(task==='story'?{thinking:{type:config.storyThinking||'disabled'}}:{}), ...(task==='story'?{tools:storyTools(messages)}:{}), stream: Boolean(options.onText), ...(options.onText ? {stream_options:{include_usage:true}} : {}), reasoning_split: true, temperature: 1, max_completion_tokens: record.maxCompletionTokens }),
+        body: JSON.stringify({ model, messages, ...(task==='memory'?{thinking:{type:'disabled'}}:task==='story'?{thinking:{type:config.storyThinking||'disabled'}}:{}), ...(task==='story'?{tools:storyTools(messages)}:{}), stream: Boolean(options.onText), ...(options.onText ? {stream_options:{include_usage:true}} : {}), reasoning_split: true, temperature: 1, max_completion_tokens: record.maxCompletionTokens }),
         signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
       });
       record.httpStatus=response.status;

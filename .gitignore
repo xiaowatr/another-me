@@ -20,3 +20,5 @@ tests/*
 !tests/iteration49.test.js
 
 !tests/memory50.test.js
+
+!tests/model-memory52.test.js

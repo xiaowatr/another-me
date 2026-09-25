@@ -1,3 +1,4 @@
+import {memoryMessages,normalizeMemoryResult} from './memory-extraction.js';
 import {storyClock} from '../src/story-clock.js';
 import {publicQuestion} from '../src/public-question.js';
 import {currentOwner,createSlots} from './request-owner.js';
@@ -36,6 +37,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
   function session(id) { const s = sessions.get(id); if (!s || s.owner!==currentOwner() || Date.now() - s.updated > 2 * 60 * 60 * 1000) { if(s?.owner===currentOwner())sessions.delete(id); throw new AppError('session', 410); } return s; }
   return {
     checkAvailable:owner=>slots.check(owner),
+    memory:(data,batchId)=>exclusive('memory',async()=>{const response=await caller.call('memory',memoryMessages(data),{memoryBatchId:batchId,validateResult:r=>normalizeMemoryResult(r,data,batchId)});return {...normalizeMemoryResult(response.result,data,batchId),requestId:response.requestId};}),
     restore(input){
       // Restoring one browser never blocks an unrelated browser.
       slots.checkOwner(currentOwner());
