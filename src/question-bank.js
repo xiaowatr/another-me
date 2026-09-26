@@ -79,7 +79,7 @@ export const QUESTION_BANK=[
       "主动多认识几个人",
       "先把自己的事安排好"
     ],
-    "group": "G09",
+    "group": "unfamiliar",
     "when": "新学校、新工作、新城市、新群体",
     "skip": "已有初到陌生环境的行为描述；没有陌生环境变化",
     "purpose": "写入shared.behavior.new_environment；影响最初几次行动。不能等同于永久内向/外向或社交能力"
@@ -342,8 +342,8 @@ export const QUESTION_BANK=[
       "我想先听听对方怎么想"
     ],
     "group": "focus",
-    "when": "朋友、伴侣、家人间的沟通分叉",
-    "skip": "已明确谈话目的；G12已回答同一目的；不是沟通类选择",
+    "when": "明确假设由用户自己开口的沟通分叉；仅对方改变态度不适用",
+    "skip": "已明确谈话目的；改变行为的主体是对方而非用户；不是用户主动沟通的选择",
     "purpose": "写入parallel.conversation_intent；决定先开口的话题，不预设对方理解、道歉或关系恢复"
   },
   {
@@ -448,7 +448,7 @@ export const QUESTION_BANK=[
       "有人一起更容易坚持",
       "先试一小段再决定"
     ],
-    "group": "coping",
+    "group": "interest-investment",
     "when": "练习或习惯形成是主题",
     "skip": "已要求每周都去、固定频率/明确节奏；G10已提供足够相关应对方式",
     "purpose": "写入shared.behavior.practice；安排日常节奏。硬性出勤约束优先，不能为戏剧性自动安排缺席"
@@ -470,5 +470,5 @@ export const QUESTION_BANK=[
     "purpose": "写入real.current_stage；分开现实进度与假设起点，不把未来获选、搬迁保存成用户已发生经历"
   }
 ];
-QUESTION_BANK.push(...[{"id":"G15","question":"那时空下来，你更想？","options":["自己待着","找熟人聊聊","出去逛逛","做点喜欢的事","看当天心情"],"group":"rest","when":"与这次故事有关且休息偏好未知","kind":"multi","skip":"任何原文已说明同类考虑则不再问；不把基础生活状态空白转为追问","purpose":"结合当时条件参考具体行动，不推断固定人格，不预设结果"},{"id":"G16","question":"那时到了陌生环境，你一般先？","options":["看看再说","找个人问问","自己试试","提前做功课"],"group":"unfamiliar","when":"本次涉及新环境且具体反应未知","kind":"multi","skip":"任何原文已说明同类考虑则不再问；不把基础生活状态空白转为追问","purpose":"结合当时条件参考具体行动，不推断固定人格，不预设结果"},{"id":"G17","question":"那时遇到不顺，你通常会？","options":["先自己琢磨","找人聊聊","暂时放一放","换个办法试试"],"group":"setback","when":"本次有学习或适应困难且应对方式未知","kind":"multi","skip":"任何原文已说明同类考虑则不再问；不把基础生活状态空白转为追问","purpose":"结合当时条件参考具体行动，不推断固定人格，不预设结果"},{"id":"G18","question":"那时喜欢上一件事，你更常？","options":["固定留时间","有空就做","集中投入一阵","找人一起"],"group":"interest-investment","when":"本次涉及兴趣或学习且投入方式未知","kind":"multi","skip":"任何原文已说明同类考虑则不再问；不把基础生活状态空白转为追问","purpose":"结合当时条件参考具体行动，不推断固定人格，不预设结果"}]);
+QUESTION_BANK.push(...[{"id":"G15","question":"那时空下来，你更想？","options":["自己待着","找熟人聊聊","出去逛逛","做点喜欢的事","看当天心情"],"group":"rest","when":"与这次故事有关且休息偏好未知","kind":"multi","skip":"任何原文已说明同类考虑则不再问；不把基础生活状态空白转为追问","purpose":"结合当时条件参考具体行动，不推断固定人格，不预设结果"},{"id":"G16","question":"那时到了陌生环境，你一般先？","options":["看看再说","找个人问问","自己试试","提前做功课"],"group":"unfamiliar","when":"本次涉及新环境且具体反应未知","kind":"multi","skip":"任何原文已说明同类考虑则不再问；不把基础生活状态空白转为追问","purpose":"结合当时条件参考具体行动，不推断固定人格，不预设结果"},{"id":"G17","question":"那时遇到不顺，你通常会？","options":["先自己琢磨","找人聊聊","暂时放一放","换个办法试试"],"group":"coping","when":"本次有学习或适应困难且应对方式未知","kind":"multi","skip":"任何原文已说明同类考虑则不再问；不把基础生活状态空白转为追问","purpose":"结合当时条件参考具体行动，不推断固定人格，不预设结果"},{"id":"G18","question":"那时喜欢上一件事，你更常？","options":["固定留时间","有空就做","集中投入一阵","找人一起"],"group":"interest-investment","when":"本次涉及兴趣或学习且投入方式未知","kind":"multi","skip":"任何原文已说明同类考虑则不再问；不把基础生活状态空白转为追问","purpose":"结合当时条件参考具体行动，不推断固定人格，不预设结果"}]);
 export const QUESTION_BY_ID=Object.fromEntries(QUESTION_BANK.map(q=>[q.id,q]));

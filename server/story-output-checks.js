@@ -6,8 +6,10 @@ export function storyOutputIssues(story,background){
  for(const [i,scene] of (story.scenes||[]).entries())for(const key of ['time','title','text'])fields.push({field:`scenes.${i}.${key}`,text:scene[key]});
  const sources=supplementSources(background).map(s=>s.text);
  const gender=roleGender(background),issues=[];
+ const knownSiblings=new Set(sources.flatMap(t=>siblingClaims(t)));
  if(inventedOpeningInteraction(story.opening))issues.push({field:'opening',reason:'invented_opening_interaction'});
  for(const {field,text} of fields){if(typeof text!=='string')continue;
+  if(siblingClaims(text).some(k=>!knownSiblings.has(k)))issues.push({field,reason:'unprovided_family_member'});
   if(/没(?:有)?说[“"]([^”"。！？]{1,12})[”"](?:却|就|又|还)(?:说|说了)[“"]\1[”"]/.test(text))issues.push({field,reason:'contradictory_repeated_phrase'});
   const paragraphs=text.split(/\n\s*\n/).map(t=>t.trim()).filter(t=>t.length>=50);if(new Set(paragraphs).size<paragraphs.length)issues.push({field,reason:'duplicated_story_paragraph'});
   // Require an authoring/instruction context, not ordinary dialogue about gender or writing.
@@ -42,4 +44,12 @@ export function inventedOpeningInteraction(text=''){
    ||/(?:你还记得|还记得吗)[^，。！？]{0,16}(?:我们|咱俩|咱们)/.test(clause)
    ||/(?:我们|咱俩|咱们)(?:上次|昨天|前天|那天|这个周末)[^，。！？]{0,12}(?:一起|一块)(?:去|做|上|烤|吃|玩)/.test(clause);
  });
+}
+
+// Explicit own-sibling claims only, without treating a friend's sibling as the user's.
+export function siblingClaims(text=''){
+ const clean=String(text).replace(/[“「『"][^”」』"]*[”」』"]/g,'');const found=[];
+ for(const m of clean.matchAll(/(?:我(?:的|有(?:一个|一位|个)?)?|家里的?)(哥哥|姐姐|弟弟|妹妹)|(?:^|[。！？；\n])\s*(哥哥|姐姐|弟弟|妹妹)(?=给我|对我|问我|叫我|陪我)/g)){
+  const before=clean.slice(Math.max(0,m.index-10),m.index);if(/(?:朋友|同事|她|他|对方)(?:的)?$/.test(before)||/(?:没有|没|不是|独生)[^。！？]{0,4}$/.test(before))continue;found.push(m[1]||m[2]);
+ }return found;
 }

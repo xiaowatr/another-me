@@ -47,3 +47,5 @@ test('opening rejects invented shared lessons but allows self events, quotes and
  assert.deepEqual(storyOutputIssues({scenes:[{text:'没说“不行”就说“可以”。'}]},b),[]);
  const paragraph='我坐在桌边整理今天带来的书，翻到刚才没看完的地方，才发现中间夹着一张收据。我把收据放在旁边，继续读下一页。';assert.ok(storyOutputIssues({scenes:[{text:paragraph+'\n\n'+paragraph}]},b).some(i=>i.reason==='duplicated_story_paragraph'));
 });
+
+test('unknown siblings are not invented, third-party family and explicit hypothetical family are allowed',()=>{const check=(text,bg=b)=>storyOutputIssues({scenes:[{text}]},bg);for(const text of ['我妹妹给我发了消息。','我的姐姐也来了。','妹妹给我打了电话。'])assert.ok(check(text).some(i=>i.reason==='unprovided_family_member'),text);for(const text of ['朋友的妹妹来了。','她对我说：“我妹妹刚回来。”','我没有妹妹，也不知道当姐姐是什么感觉。'])assert.ok(!check(text).some(i=>i.reason==='unprovided_family_member'),text);assert.ok(!check('我妹妹刚回来。',{...b,details:'我有一个妹妹。'}).some(i=>i.reason==='unprovided_family_member'));assert.ok(!check('我妹妹刚回来。',{...b,hypotheticalDirection:'假设我有个妹妹。'}).some(i=>i.reason==='unprovided_family_member'));});
