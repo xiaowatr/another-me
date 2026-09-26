@@ -229,3 +229,12 @@ src/chat-viewport.js以真实容器位置做增量校正，补文档滚动和输
 ## v82 按阶段限制调用
 替代v81共享四次规则：story最多4（含原模型追问/续答），scenario review最多4，setting review最多4（仍受原启用开关控制），总兜底12。检查不占正文机会；每个候选正文至多各检查一次，并非每次都用完额度。questions仍独立。新增server/story-stage-budget.js，连同minimax、story-timing、index、story-tasks、experience、core、diagnostics以及前端story-budget、story-retry、story-task-client一起发布。
 任务响应新增storyCallCount/stageCallCounts；总数cumulativeCallCount语义保持，前端用正文数恢复和决定重写。20项定向回归、构建通过，含第四份正文在累计调用超过4后仍完成检查；零付费测试，真实模型成功率未验证。v82-local/Prompt v38/questions-v3，index-R1GMcpmn.js/index-C9q6ejAT.css。原Render配置不变，必须前后端一起发布；未提交推送部署。
+
+## v83 叙述输出校验
+新增server/story-output-checks.js，连同experience/prompts/story-rewrite/story-tools/diagnostics发布。保存和返回前拒绝内部规则说明泄漏及未知性别下的部分无依据主角设定，带字段与原因进入既有重写预算；不以删句代替正确生成。正常第三方描述、有原文依据的声部不全局拦截。有限句式检测仍可能漏检，不能宣称完整语义保证。
+28项定向测试、真实失败输出离线重放、模拟重写流程和构建通过；无新增付费调用/真机验收，未部署。v83-local/Prompt v39/questions-v3，index-R1GMcpmn.js/index-C9q6ejAT.css；按原Render流程发布，无新配置。旧故事和文风批注材料不自动改写，私密材料不提交。
+
+## v84 修订文风与补充复核
+writing-style更新自然停句与表达参考，prompts v40；开场增加部分无依据共同互动校验，特定病句/完全重复长段拒绝后沿已有预算重写。不是全局词语屏蔽或全语义保证。前端章节按原换行分段，旧正文不修改。
+questions-v4首次零题可在同一任务内额外复核一次相关行为信息缺口，最多2道普通题，允许仍为0；已展示/跳过状态不进入首次复核。不强制凑数，但可能增加一次questions调用与等待，故事/检查额度不变。发布须包含补充规划器、experience、writing-style、prompts、story-output-checks、participant-identity、main及diagnostics等前后端变更。
+38项定向与构建通过，隔离页面模拟0题复核、填写、生成及分段通过；无真实模型/真机验收。v84-local/Prompt v40/questions-v4/style-reference-v3，index-DHfW1V84.js/index-C9q6ejAT.css；未推送部署，无新配置，不上传私密修订材料/台账/夹具。

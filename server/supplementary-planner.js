@@ -6,7 +6,7 @@ const QUESTION_BY_ID={...ORDINARY_BY_ID,...SCENARIO_BY_ID};
 import {supplementState,supplementSources,answerText,validateSupplement,supplementKey} from '../src/supplementary.js';
 import {timeAnchors} from '../src/input-anchors.js';
 import {AppError} from './core.js';
-export const PLANNER_VERSION='questions-v3';
+export const PLANNER_VERSION='questions-v4';
 export function plannerMessages(background){const state=supplementState(background);return [{role:'system',content:`先统一理解所有原始经历、假设、基础信息、约束、选项与手写。每次最多3题，每组2—3题但不凑数；通常共3—4题，稀少且有高价值缺口可5—6题，总含情景最多8；信息充分可以0—2。能生成不等于已了解人物，只有具体行动信息不足才继续。未填MBTI可检查行为缺口，但不增加固定题数；填写MBTI也不能代替证据。已写全职很忙不再问状态；已写周末独自散步不再问休息/独处；已写不想领唱只想一起唱不再问舞台中心。全程按含义、条件、对象去重：在任何字段已答同件事，covered标相应题与逐字证据，不只检查题号。已跳过维度不换场景重问。G14不再用于新问题，不问观察时长。过去分叉询问当时，未来设想询问现在，不把假设当发生。最后可选一道scenarioBank假设情景，只有主题相关、未被表达且易答才给scenarioCandidates最多3项；每项{id,relevance:0至2,information:0至2,ease:0至2,reason}。情景题不为填数量，只作为最后一题；提供候选时普通questions最多2项。没有候选则空数组。用stop明确是否该停止，剩下只能标签或重复就true。已有scenario时禁止再选情景或追加普通题，但可分析已答。原始题干人物事件不是用户事实。
 若scenario有未跳过的回答，同时输出scenarioAnalysis:{id,considerations:[{focus:behaviorVocabulary.focus里的代码,condition:behaviorVocabulary.condition里的代码,approach:behaviorVocabulary.approach里的代码,evidence:回答逐字证据,conditionEvidence:对应条件的逐字证据或noCondition时空串,explicit:true}],unknown:[]}。只能用回答明确表达的考虑，保留条件；未说明条件用noCondition，不泛化。玩笑/含糊/不知道/跳过不提炼。每条focus与approach必须有证据，不用题干当证据；词表无法准确表达则留未知。给他人建议不等同自身偏好。不能输出情景人物地点物件行动为事实，禁止用自由叙事改写成新故事。
 你是生成前的补充选题器，从固定题库选0至3题，不生成故事。先理解原文、基础字段、全部已答和跳过信息，再找与这次选择相关、尚未回答、能影响具体情节行动的缺口。信息充分可以0题，不为凑数提问。G12已停用，不问用户想看哪些剧情或分配故事篇幅；故事展开由创作完成。回答不知道、不确定或不想回答就是结束该维度，保持未知，不换问法追问。G01/G02/G03/G13/F02不在题库；基础生活状态、原因、限制留空保持未知，不能换成补充题追问。已知探索重点与时间不重复问。所有手写回答与选项同等参与理解；明确纠正只修正对应内容，不能任意覆盖全部已知事实。基础原文修改后，结合answerContexts判断旧答案是否仍适用于当前故事；不适用的内容仅保留历史，不应用为当前人物事实。已展示题不会再选；手写答案同时覆盖其他维度时用covered标明证据来源。
@@ -33,3 +33,14 @@ export function normalizePlan(raw,b){
  return {questions:conflict||s.scenario?[]:questions,covered,conflict,expectations,stop:!conflict&&(Boolean(raw.stop)||Boolean(s.scenario)||Boolean(picked)||questions.length===0||s.shown.length+questions.length>=8),scenarioAnalysis};
 }
 export function createPlannerTasks(run){const cache=new Map();return (owner,b)=>{const s=supplementState(b),input={background:{...b,supplementary:undefined},shown:s.shown,answers:s.answers,answerContexts:s.answerScopes||{},confirmations:s.confirmations,extra:s.extra,scenario:s.scenario?{id:s.scenario.id,answer:s.scenario.answer,skipped:s.scenario.skipped,scopeKey:s.scenario.scopeKey}:null,recentScenarios:s.recentScenarios||[]};const key=owner+':'+createHash('sha256').update(JSON.stringify(input)).digest('hex');if(cache.has(key))return cache.get(key);if(cache.size>=500)cache.delete(cache.keys().next().value);const promise=Promise.resolve().then(()=>run(b)).catch(e=>{if(e.retryableBeforeModel&&e.category==='busy'&&cache.get(key)===promise)cache.delete(key);throw e;});cache.set(key,promise);return promise;};}
+
+export async function planWithGapCheck(background,caller){
+ const request=messages=>caller.call('questions',messages,{validateResult:r=>normalizePlan(r,background)});
+ let response=await request(plannerMessages(background));let plan=normalizePlan(response.result,background);const s=supplementState(background);
+ if(!plan.conflict&&!plan.questions.length&&!s.shown.length&&!s.scenario){
+  const messages=plannerMessages(background);messages[0].content+='\n本次是首次零题决定的唯一一次复核。已有工作身份、忙闲、作息，不等于已有处理困难、参与陌生环境或对爱好的具体态度。重新按全部原文核对是否仍有1至2项与这次故事有关的行为信息缺口；有才选1至2道短选项，不复问工作作息、不强迫填基础空白。不把性格标签或MBTI当证据。信息足够、无关或已表达则仍返回零题，不能为本次复核凑题。回答应说明选择依据；不展开情景题以增加负担。';
+  messages[1].content=JSON.stringify({...JSON.parse(messages[1].content),scenarioBank:[],previousZeroQuestionDecision:{covered:plan.covered}});
+  const limited=r=>({...r,questions:Array.isArray(r?.questions)?r.questions.slice(0,2):r?.questions,scenarioCandidates:[]});response=await caller.call('questions',messages,{validateResult:r=>normalizePlan(limited(r),background)});plan=normalizePlan(limited(response.result),background);
+ }
+ return {...plan,requestId:response.requestId};
+}

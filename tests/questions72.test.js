@@ -21,3 +21,12 @@ test('malformed navigation state and third core-confirmation answer are rejected
 
 test('unknown short answer finishes as skipped without losing original; substantive uncertainty remains',()=>{const s=supplementState(base());s.shown=['G04','G08'];s.answers={G04:{selected:[],text:'不知道。',skipped:false},G08:{selected:[],text:'不知道怎么说，但我喜欢记笔记。',skipped:false}};const done=finishSupplementPage(s,s.shown);assert.equal(done.answers.G04.skipped,true);assert.equal(done.answers.G04.text,'不知道。');assert.equal(done.answers.G08.skipped,false);assert.equal(supplementaryContext(saveSupplement(base(),done)).answers.length,1);});
 test('plot-focus question is excluded from live selection, old answers remain readable',()=>{const b=base();assert.ok(!JSON.parse(plannerMessages(b)[1].content).bank.some(q=>q.id==='G12'));assert.deepEqual(normalizePlan(raw(['G12']),b).questions,[]);const s=supplementState(b);s.shown=['G12'];s.answers.G12={selected:[],text:'此前填写的关注点',skipped:false};assert.equal(supplementaryContext(saveSupplement(b,s)).answers[0].text,'此前填写的关注点');});
+
+import {planWithGapCheck} from '../server/supplementary-planner.js';
+test('initial zero questions is reassessed once for useful behavioral gaps without a quota',async()=>{
+ const b={...base(),lifeSituation:'全职工作，晚上回家休息。'};let calls=0;
+ const caller={call:async(task,m,options)=>{calls++;if(calls===2){assert.ok(m[0].content.includes('唯一一次复核'));assert.deepEqual(JSON.parse(m[1].content).scenarioBank,[]);}const result=raw(calls===1?[]:['G16','G18']);options.validateResult(result);return {result,requestId:'mock'};}};
+ const p=await planWithGapCheck(b,caller);assert.equal(calls,2);assert.deepEqual(p.questions.map(q=>q.id),['G16','G18']);
+ calls=0;const none=await planWithGapCheck(b,{call:async()=>{calls++;return {result:raw([])};}});assert.equal(calls,2);assert.equal(none.questions.length,0);
+ let s=supplementState(b);s.shown=['G16'];s.pages=[['G16']];s.answers.G16={selected:[],text:'不知道',skipped:true};calls=0;await planWithGapCheck(saveSupplement(b,s),{call:async()=>{calls++;return {result:raw([])};}});assert.equal(calls,1);
+});

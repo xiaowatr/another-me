@@ -16,7 +16,7 @@ test('two story requests carry reference excerpts and raw expression clues witho
 });
 test('six chat situations use identical style in normal and stream paths; examples are not injected as conversation history',()=>{
  const session={background:inputs[0],story:demoStory,memories:[],history:[{role:'user',content:'我今天说话有点急，想直说。'},{role:'assistant',content:'虚构角色口癖，不能当作用户文风。'}]};
- const situations=[['刚才那个小插曲挺逗的。','D03'],['练了好久却没什么进步，我想说说。','D03'],['你理解错了，我没有要放弃。','A15'],['先去忙，回头有空再说。','C10'],['你记得我学了什么吗？','D03'],['请详细讲讲那一次练习。','D03']];
+ const situations=[['刚才那个小插曲挺逗的。','D21'],['练了好久却没什么进步，我想说说。','D21'],['你理解错了，我没有要放弃。','A15'],['先去忙，回头有空再说。','C10'],['你记得我学了什么吗？','D21'],['请详细讲讲那一次练习。','D21']];
  for(const [message,firstId] of situations){const normal=chatMessages(session,message,'chat'),stream=streamingChatMessages(session,message,'chat'),data=JSON.parse(normal[1].content);
   for(const sent of [normal,stream]){assert.ok(sent[0].content.includes(EXPRESSION_RULES));assert.ok(sent[0].content.includes(CHAT_EXPRESSION));assert.ok(!sent[0].content.includes('日常回复通常约10至180字'));}
   assert.deepEqual(normal.slice(1),stream.slice(1));assert.equal(data.writingReference.examples[0].id,firstId);
