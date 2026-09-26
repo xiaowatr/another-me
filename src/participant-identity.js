@@ -24,4 +24,4 @@ export function safeOpeningAddress(opening,background={}){
  return value.slice(m[0].length).trim()||'我在这里，你想从哪件事聊起？';
 }
 
-export function safeOpeningHistory(opening){const text=String(opening||'');return /你(?:最近|刚才|之前|以前|曾经|上次|前几天)?(?:问|说|提起|告诉)(?:过)?(?:我|我们)|我们(?:之前|上次|刚才)(?:聊|说|谈)|今天我们就聊到这/.test(text)?'刚经历完这段日子，我想跟你聊聊。你想从哪件事说起？':text;}
+export function safeOpeningHistory(opening){const text=String(opening||'');return /(?:听你|你)(?:刚才|最近|之前|先前)?问的(?:那些|这些|几个|那几个|这几个)问题|你(?:最近|刚才|之前|以前|曾经|上次|前几天)?(?:问|说|提起|告诉)(?:过)?(?:我|我们)|我们(?:之前|上次|刚才)(?:聊|说|谈)|今天我们就聊到这/.test(text)?'刚经历完这段日子，我想跟你聊聊。你想从哪件事说起？':text;}

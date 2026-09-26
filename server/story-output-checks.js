@@ -43,6 +43,8 @@ export const STORY_OUTPUT_RULE='叙述字段只写故事本身，不能夹带创
 export function inventedOpeningInteraction(text=''){
  const direct=String(text).replace(/[“「『"][^”」』"]*[”」』"]/g,'');
  return direct.split(/[。！？；\n]/).some(clause=>{
+  const prior=/(?:听你|你)(?:刚才|最近|之前|先前)?问的(?:那些|这些|几个|那几个|这几个)问题/.exec(clause);
+  if(prior&&!/(?:如果|假如|要是|以后|下次|没有|还没|没听|并未)[^，,。！？]{0,12}$/.test(clause.slice(0,prior.index)))return true;
   if(/(?:如果|假如|要是|下次|改天|以后|下个周末|打算|准备|想|可以|要不要|还没|没有|没(?:教|带|陪)|没曾|从没|并未|不曾)/.test(clause))return false;
   return /(?:我|上次|昨天|前天|那天|这个周末|这周末)[^，。！？]{0,12}(?:教|带|陪)你[^，。！？]{0,20}(?:过|的那|的这)/.test(clause)
    ||/(?:你还记得|还记得吗)[^，。！？]{0,16}(?:我们|咱俩|咱们)/.test(clause)
