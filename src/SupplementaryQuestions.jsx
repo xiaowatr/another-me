@@ -5,13 +5,13 @@ import {experience} from './services';
 const isUnknown=text=>/^(?:说不清|不确定|不愿透露|都不太符合|还没定|还没想好)/.test(text);
 const fresh=()=>({selected:[],text:'',skipped:false});
 export default function SupplementaryQuestions({background,onChange,onClose,onGenerate}){
- const [state,setState]=useState(()=>supplementState(background)),[busy,setBusy]=useState(false),[error,setError]=useState(''),[confirmation,setConfirmation]=useState('');
+ const [state,setState]=useState(()=>supplementState(background)),[busy,setBusy]=useState(false),[error,setError]=useState(''),[confirmation,setConfirmation]=useState(''),[progress,setProgress]=useState('正在准备补充问题…');
  const current=useRef(state),base=useRef(background),revision=useRef(0),request=useRef(null),pending=useRef(null),dialog=useRef(null);
  function store(s){current.current=s;setState(s);base.current=saveSupplement(base.current,s);onChange(base.current);return base.current;}
  function invalidate(){revision.current++;request.current?.abort();request.current=null;pending.current=null;setBusy(false);}
  function edit(s){invalidate();setError('');store({...s,plan:s.plan?.conflict?s.plan:null});}
- async function plan(s){invalidate();const version=revision.current,controller=new AbortController();request.current=controller;const b=store(s);setBusy(true);setError('');
-  try{const task=experience.planQuestions(b,controller.signal);pending.current=task;const result=await task;if(version!==revision.current)return;const ids=result.questions.map(q=>q.id);store({...current.current,plan:result,questionMeta:{...current.current.questionMeta,...Object.fromEntries(result.questions.map(q=>[q.id,q]))},shown:[...new Set([...current.current.shown,...ids])],pages:ids.length?[...current.current.pages,ids]:current.current.pages,page:current.current.pages.length});}
+ async function plan(s){invalidate();const version=revision.current,controller=new AbortController();request.current=controller;const b=store(s);setBusy(true);setProgress('正在准备补充问题…');setError('');
+  try{const task=experience.planQuestions(b,controller.signal,text=>{if(version===revision.current)setProgress(text);});pending.current=task;const result=await task;if(version!==revision.current)return;const ids=result.questions.map(q=>q.id);store({...current.current,plan:result,questionMeta:{...current.current.questionMeta,...Object.fromEntries(result.questions.map(q=>[q.id,q]))},shown:[...new Set([...current.current.shown,...ids])],pages:ids.length?[...current.current.pages,ids]:current.current.pages,page:current.current.pages.length});}
   catch(e){if(version===revision.current)setError(e.message||'补充问题暂时没有整理好，已答内容已保留，可以直接生成。');}
   finally{if(version===revision.current){pending.current=null;setBusy(false);}}
  }
@@ -28,7 +28,7 @@ export default function SupplementaryQuestions({background,onChange,onClose,onGe
  <label className="field">{q.kind==='text'?'一句话就好，也可以跳过':'自己说（可直接输入，也可补充选项）'}<textarea maxLength={500} rows={2} value={a.text} onChange={e=>changeAnswer(id,{...a,text:e.target.value,selected:a.selected.filter(x=>!isUnknown(x)),skipped:false})}/></label><button type="button" className="text-button" aria-pressed={a.skipped} onClick={()=>changeAnswer(id,{...fresh(),skipped:true})}>{a.skipped?'已跳过':'跳过这一题'}</button></section>;})}
  {!ids.length&&!busy&&state.plan&&<p>已有信息可以开始写了，你也可以再补一句。</p>}
  <p className="small">时间选“刚开始的几周”时按三周安排；选“交给故事选”时默认观察两个月。明确写出的起止时间优先。</p><label className="field">再补一句（选填）<textarea rows={2} maxLength={500} value={state.extra} onChange={e=>edit({...current.current,extra:e.target.value})}/></label>
- <div className="am-followup-actions">{state.page>0&&<button type="button" className="text-button" onClick={()=>{invalidate();store({...current.current,page:state.page-1});}}>上一组</button>}{state.page<state.pages.length-1&&<button type="button" className="text-button" onClick={()=>{invalidate();store({...current.current,page:state.page+1});}}>查看下一组已填答案</button>}{(ids.length>0||!state.plan)&&<button type="button" className="primary" disabled={busy} onClick={()=>plan(finishPage())}>{busy?'正在理解你的补充…':'提交补充，看看是否还需回答'}</button>}<button type="button" className="text-button" onClick={generate}>直接生成（保留已答内容）</button></div></>}
- {busy&&<p role="status">正在理解已填内容，不会因每次输入而发起请求。</p>}{error&&<p role="alert">{error}</p>}
+ <div className="am-followup-actions">{state.page>0&&<button type="button" className="text-button" onClick={()=>{invalidate();store({...current.current,page:state.page-1});}}>上一组</button>}{state.page<state.pages.length-1&&<button type="button" className="text-button" onClick={()=>{invalidate();store({...current.current,page:state.page+1});}}>查看下一组已填答案</button>}{(ids.length>0||!state.plan)&&<button type="button" className="primary" disabled={busy} onClick={()=>plan(finishPage())}>{busy?'正在准备补充问题…':'提交补充，看看是否还需回答'}</button>}<button type="button" className="text-button" onClick={generate}>直接生成（保留已答内容）</button></div></>}
+ {busy&&<p role="status">{progress}</p>}{error&&<p role="alert">{error}</p>}
  </dialog>;
 }

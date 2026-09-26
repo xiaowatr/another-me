@@ -55,3 +55,5 @@ tests/*
 !tests/style70.test.js
 
 !tests/questions72.test.js
+
+!tests/feedback73.test.js

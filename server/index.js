@@ -50,6 +50,7 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'GET' && pathname === '/api/status') return json(res, 200, {...app.status(),instanceId:tasks.instanceId});
       if (req.method === 'GET' && pathname === '/api/usage') return json(res,200,usageReport());
       const owner=authenticate(req);
+      if(req.method==='GET'&&pathname==='/api/availability')return json(res,200,withOwner(owner,()=>app.availability()));
       const taskMatch=pathname.match(/^\/api\/story\/tasks\/([a-f0-9-]{36})(\/cancel)?$/);
       if(req.method==='GET'&&taskMatch&&!taskMatch[2])return json(res,200,tasks.get(owner,taskMatch[1]));
       if (req.method !== 'POST') return json(res, 404, { error: '接口不存在。' });
@@ -83,7 +84,7 @@ const server = http.createServer(async (req, res) => {
       }
       // All production chat uses the streaming route and explicit confirmed memories.
       return json(res, 404, { error: '接口不存在。' });
-    } catch (e) { const category = e instanceof AppError ? e.category : 'upstream';e.requestId||=requestId;if(process.env.REQUEST_DIAGNOSTICS!=='0')console.info(JSON.stringify({type:'api_error',requestId,route:pathname.replace(/tasks\/[a-f0-9-]+/,'tasks/:id'),category,durationMs:Date.now()-receivedAt,codeVersion:app.status().version})); return json(res, e instanceof AppError ? e.status : 500, { error: errorMessages[category] || '请求失败，请稍后重试。', category, requestId: e.requestId }); }
+    } catch (e) { const category = e instanceof AppError ? e.category : 'upstream';e.requestId||=requestId;if(process.env.REQUEST_DIAGNOSTICS!=='0')console.info(JSON.stringify({type:'api_error',requestId,route:pathname.replace(/tasks\/[a-f0-9-]+/,'tasks/:id'),category,durationMs:Date.now()-receivedAt,codeVersion:app.status().version})); return json(res, e instanceof AppError ? e.status : 500, { error: errorMessages[category] || '请求失败，请稍后重试。', category, requestId: e.requestId,...(e.retryableBeforeModel?{retryableBeforeModel:true}:{}) }); }
   }
   // 开发服务器不能向浏览器提供密钥、诊断或服务端源文件。
   let decoded; try { decoded = decodeURIComponent(req.url); } catch { res.writeHead(400); return res.end(); }

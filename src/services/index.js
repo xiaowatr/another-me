@@ -1,3 +1,4 @@
+import {planWhenReady} from './question-admission.js';
 import {anonymousToken} from './anonymous.js';
 import {createStoryClient} from './story-task-client.js';
 import {storyWithRetry} from './story-retry.js';
@@ -11,13 +12,13 @@ import {storyWithRetry} from './story-retry.js';
   let data;
   try { data = await response.json(); } catch { const error=new Error('服务返回异常，输入已保留，请稍后手动重试。');error.category=combinedSignal.aborted?'timeout':'network';error.requestId=timing?.requestId;error.timing=timing;throw error; }
   if(timing)timing.jsonParsedMs=Math.round(performance.now()-started);
-  if (!response.ok) {const error=new Error(data.category==='busy'?'上一条请求尚未结束，你填写的内容仍保留。请稍后再试，不用刷新页面。':data.error || '请求失败，请手动重试。');error.category=data.category;error.timing=timing;error.requestId=data.requestId||timing?.requestId;throw error;}
+  if (!response.ok) {const error=new Error(data.category==='busy'?'上一条请求尚未结束，你填写的内容仍保留。请稍后再试，不用刷新页面。':data.error || '请求失败，请手动重试。');error.category=data.category;error.retryableBeforeModel=data.retryableBeforeModel===true;error.timing=timing;error.requestId=data.requestId||timing?.requestId;throw error;}
   if(timing)data.clientTiming=timing;
   return data;
 }
 const storyClient=createStoryClient(request);
 export const experience = {
-  planQuestions:(background,signal)=>request('/api/questions',{background},signal),
+  planQuestions:(background,signal,onWait)=>planWhenReady(request,background,signal,onWait),
   extractMemory:input=>request('/api/memory/extract',input,undefined,input.batchId),
   memoryDiagnostic:input=>request('/api/memory/diagnostic',input).catch(()=>{}),
   cancelStory:()=>storyClient.cancel(),

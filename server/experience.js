@@ -28,9 +28,9 @@ export function createExperience(config, caller, recordLocal = () => {}) {
   async function exclusive(task, fn) {
     const started = Date.now(); let upstreamRecorded = false; let success = false; let category = null; let release = null;
     try {
-      release=slots.acquire(currentOwner());
+      release=slots.acquire(currentOwner(),task);
       const result = await fn(); upstreamRecorded = Boolean(result.requestId); success = true; return result;
-    } catch (e) { upstreamRecorded = Boolean(e.requestId); category = e.category || 'upstream'; throw e; }
+    } catch (e) { if(!release&&e.category==='busy')e.retryableBeforeModel=true;upstreamRecorded = Boolean(e.requestId); category = e.category || 'upstream'; throw e; }
     finally {
       release?.();
       if (!upstreamRecorded) recordLocal({requestId: randomUUID(),time:new Date().toISOString(),task,model:config.model,promptVersion:task==='questions'?PLANNER_VERSION:PROMPT_VERSION,durationMs:Date.now()-started,success,errorCategory:category,inputTokens:null,outputTokens:null,totalTokens:null,sent:false,mode:config.mode});
@@ -39,6 +39,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
   function session(id) { const s = sessions.get(id); if (!s || s.owner!==currentOwner() || Date.now() - s.updated > 2 * 60 * 60 * 1000) { if(s?.owner===currentOwner())sessions.delete(id); throw new AppError('session', 410); } return s; }
   return {
     questions:input=>questionTasks(currentOwner(),validateBackground(migrateBackground(input.background))),
+    availability:()=>slots.availability(currentOwner()),
     checkAvailable:owner=>slots.check(owner),
     memory:(data,batchId)=>exclusive('memory',async()=>{const response=await caller.call('memory',memoryMessages(data),{memoryBatchId:batchId,validateResult:r=>normalizeMemoryResult(r,data,batchId)});return {...normalizeMemoryResult(response.result,data,batchId),requestId:response.requestId};}),
     restore(input){

@@ -192,3 +192,7 @@ src/chat-viewport.js以真实容器位置做增量校正，补文档滚动和输
 ## v72 动态补充题
 新增 src/question-bank.js、src/supplementary.js、src/SupplementaryQuestions.jsx、server/supplementary-planner.js，连同API、模型调用、生成上下文、表单/草稿和样式接入一起发布。31题按语义选0—3题，总展示不超过8；每组提交调用questions任务，不按输入字数触发。匿名用户/输入快照缓存、限流及并发保护沿用；选题使用当前模型、thinking disabled、3500输出额度，是独立于故事4次预算的新增模型调用。失败不无限自动重试，可保留答案直接生成；核心冲突须确认或修改。
 23项定向离线检查与隔离生产页面模拟通过，真实模型理解和情节落实质量尚未验证；0付费测试，未提交推送部署。v72-local / Prompt 2026-09-26.v34 / questions-v1，index-BGUSkg-V.js / index-PN3jeIkM.css。沿现有Render绑定分支、原Build/Start部署整个前后端，无新密钥或环境变量；核对/api/status的version/questionPlannerVersion及前端资源。保留旧存档，勿上传.local、私密台账、原始日志和用户附件。
+
+## v73 补充题等待及内容约束
+新增src/services/question-admission.js与匿名保护的GET /api/availability，前后端必须一起发布。补充题占用时只读等待最多45秒，显示当前用户等待任务；明确进槽前busy不再缓存为永久失败，网络不明/模型失败不自动重付。保留原限流与并发。CORE/STORY加强选择一致性与无依据贴身习惯留白；可选审查增加前后连续性约束，未改变启用配置或增加模型调用。
+30项离线测试、隔离生产HTTP demo及构建通过，未做本轮浏览器/真实模型/线上验收；语义一致性仍未证明。v73-local/Prompt 2026-09-26.v35，index-B-qaOwql.js/index-PN3jeIkM.css。现有Render Build/Start不变，无新环境变量；未提交、推送、部署。私密记录和.local不提交。
