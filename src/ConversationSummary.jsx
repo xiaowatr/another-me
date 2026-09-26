@@ -1,5 +1,6 @@
 import React from 'react';
 export default function ConversationSummary({rows=[]}){
  if(!rows.length)return null;
- return <section className="memory-panel"><h3>聊天总结</h3><p className="small">按发言顺序整理，包括状态、心情、问题与纠正。语气描述是当时的观察，不代表固定性格；较晚的纠正以较晚发言为准。</p>{rows.map((row,i)=><article className="memory-item" key={row.sourceId}><span className="tag">第 {i+1} 条 · {row.mode==='summary'?'归纳':'原话摘录 · 待归纳'}</span><p className="memory-body">{row.text}</p>{row.mode==='summary'&&<details className="memory-source"><summary>查看原话</summary><p>{row.sourceText}</p></details>}</article>)}</section>;
+ const pending=rows.filter(row=>row.mode!=='summary').length;
+ return <details className="conversation-recap"><summary>聊天回顾 · {rows.length} 条{pending?`（${pending} 条待归纳）`:''}</summary><p className="small">这里保留聊天内容；已保存、可供后续聊天参考的个人事实在上方“关于你的记忆”。</p><ol>{rows.map(row=><li key={row.sourceId}><p>{row.text}</p>{row.mode==='summary'?<details><summary>原话</summary><p>{row.sourceText}</p></details>:<small>原话已保存，尚未完成归纳</small>}</li>)}</ol></details>;
 }

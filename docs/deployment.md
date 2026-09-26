@@ -196,3 +196,36 @@ src/chat-viewport.js以真实容器位置做增量校正，补文档滚动和输
 ## v73 补充题等待及内容约束
 新增src/services/question-admission.js与匿名保护的GET /api/availability，前后端必须一起发布。补充题占用时只读等待最多45秒，显示当前用户等待任务；明确进槽前busy不再缓存为永久失败，网络不明/模型失败不自动重付。保留原限流与并发。CORE/STORY加强选择一致性与无依据贴身习惯留白；可选审查增加前后连续性约束，未改变启用配置或增加模型调用。
 30项离线测试、隔离生产HTTP demo及构建通过，未做本轮浏览器/真实模型/线上验收；语义一致性仍未证明。v73-local/Prompt 2026-09-26.v35，index-B-qaOwql.js/index-PN3jeIkM.css。现有Render Build/Start不变，无新环境变量；未提交、推送、部署。私密记录和.local不提交。
+
+## v74 手机补充页简化
+直接生成变为底部主按钮，继续选题可选；未知短答标跳过并保留原文，首组额外要求默认折叠，不再反复要求补写。移除常驻时间说明，停用G12选题但兼容旧答案；手机返回按钮不折行。发布包含src/SupplementaryQuestions.jsx、supplementary.js、style.css、server/supplementary-planner.js/diagnostics及合成测试变化。
+21项定向测试、320px隔离生产页面模拟、构建通过；零真实模型调用，手机Safari真机待验收，初次选题仍有模型耗时。v74-local/questions-v2，index-C8OivjeC.js/index-BGBeyu69.css。无新环境变量，沿现有Render前后端发布流程；未提交推送部署，不清旧数据。
+
+## v75 开场收信人与过去经历记忆
+故事请求补回CORE，开场明确现实自己为收信人，有限误称检查沿用已有重写预算。记忆接受来源明确的用户过去经历，保留时态/确认/归属保护；资料面板先展示已保存记忆，聊天回顾改为折叠紧凑列表。新数据走原保存流程，不迁移或删除旧数据，不自动付费回溯处理旧摘要。
+34项定向离线、隔离生产页面模拟保存刷新及390px布局检查通过，未验证真实模型/手机Safari/线上效果。v75-local/Prompt 2026-09-26.v36/memory-v9，index-D7jDFCH_.js/index-BkyzXg7d.css。发布需包含前后端全部相关修改及既有v74修改，沿原Render Build/Start，无新环境变量；核对/api/status及前端资源。未提交推送部署，私密台账、原始记录、.local不得上传。
+
+## 补充题交互动效（前端更新）
+本轮仅SupplementaryQuestions.jsx/style.css：轻按压与选中勾号、整组过渡、等待墨点、重复点击保护、固定头尾的单内容滚动弹层及安全区。无新依赖/环境变量，不改选题规则与模型提示，后端版本仍v75-local。
+21项回归、隔离生产页面选择/导航/手写/失败恢复/请求中直接生成和构建通过；390px及压缩可视高度模拟通过。真实Safari键盘及操作系统减少动态效果仍待验收。前端index-CvcHetcf.js/index-AVcMViue.css；未推送部署。沿原Render流程构建发布，保留此前未提交更改，私密记录/夹具不上传。
+
+## 选项墨色晕染（前端更新）
+仅补充组件与CSS：点击原点柔边径向墨层220ms铺开、勾号延后浮现，取消淡退，键盘中心起始，减少动态效果静态回退。隔离页面选择切换/取消/键盘及等宽检查、构建通过；手机真机和逐帧视觉待验收。index-BvA2xjdZ.js/index-C_fqEgof.css；后端不变，未推送部署，无新配置。
+
+## 横向淡水墨选中（前端更新）
+仅补充题组件/CSS：低透明度内联SVG笔痕，220ms横向揭示，深绿文字及小勾；减少动态效果静态显示。无新资源请求或依赖。构建与390px隔离页面选中/取消/键盘检查通过，未真机验证。index-CVEkO3_Q.js/index-Ct6sMT2l.css；未部署，后端不变，沿用现有发布流程。
+
+## 同页补充与无边框墨迹（前端更新）
+补充组件合并已有题到同一页，移除题数和继续选题/翻页入口；首次选题及核心冲突规则不变，答案按全部显示题保存，旧数据兼容。正常等待文案更换，笔痕加宽加深、去常驻边框。21项回归、构建、390px隔离填写到生成通过；零付费测试，手机Safari及旧多组浏览器未复测。index-CxAaYDBv.js/index-C9q6ejAT.css；本地5210已提供资源，未推送部署，后端版本不变。
+
+## v80 现实北京时间
+新增server/realtime-context.js，prompts接入开场和全部聊天路径。现实问候/作息使用每请求Asia/Shanghai日期与时分，故事日期/角色经历仍独立，不因故事夜晚催睡。不新增模型调用，不改变文风采样或跨故事共享。10项定向和构建通过，真实模型表现待验收。v80-local/Prompt v37，前端资源不变；本地5210已重启，线上未部署。发布须包含新增服务端模块及prompts/diagnostics，无新配置。
+
+## v81 情景题与语义补充
+新增src/scenario-bank.js（40道原编号题）、src/scenario-context.js及server/scenario-review.js，连同question-bank、supplementary、SupplementaryQuestions、supplementary-planner、experience、prompts、diagnostics一起发布。分组动态选题、语义来源去重；每次最多一道情景题，近期轮换且同草稿稳定。情景原文独立存储，只把有证据的抽象条件/考虑方式传给生成；失败可跳过可选分析，不能退回发送原文。旧数据不清空，不自动回溯旧故事。
+有效情景参考会触发独立事件结构检查，不受普通可选setting review开关控制；新增的review调用共享既有故事操作总4次模型调用预算，因此实际故事重写机会可能减少。补充questions仍按原独立预算、按组提交，不逐字调用。无新依赖/密钥/环境变量；可能增加生成耗时，未测真实模型延迟。
+36项定向测试、构建、隔离生产页两次模拟故事通过（含分析失败后跳过）。预设返回不能证明真实语义去重、不同回答的人物效果或搬用检测准确率；手机尺寸模拟不等于Safari真机。v81-local/Prompt v38/questions-v3，index-DNsiLHya.js/index-C9q6ejAT.css；沿现有Render前后端流程，核对/api/status与前端资源。未提交推送部署；私密台账、附件、.local及原始测试记录不得上传。
+
+## v82 按阶段限制调用
+替代v81共享四次规则：story最多4（含原模型追问/续答），scenario review最多4，setting review最多4（仍受原启用开关控制），总兜底12。检查不占正文机会；每个候选正文至多各检查一次，并非每次都用完额度。questions仍独立。新增server/story-stage-budget.js，连同minimax、story-timing、index、story-tasks、experience、core、diagnostics以及前端story-budget、story-retry、story-task-client一起发布。
+任务响应新增storyCallCount/stageCallCounts；总数cumulativeCallCount语义保持，前端用正文数恢复和决定重写。20项定向回归、构建通过，含第四份正文在累计调用超过4后仍完成检查；零付费测试，真实模型成功率未验证。v82-local/Prompt v38/questions-v3，index-R1GMcpmn.js/index-C9q6ejAT.css。原Render配置不变，必须前后端一起发布；未提交推送部署。

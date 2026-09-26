@@ -29,7 +29,7 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       if (config.mode !== 'real') throw new AppError('configuration');
       try { fs.appendFileSync(auditPath, ''); } catch { throw new AppError('local_storage',500); }
       options.onStart?.(record.requestId);
-      record.sent = true;trace?.modelStart(record.requestId,config.model,task);
+      trace?.modelStart(record.requestId,config.model,task,options.reviewStage);record.sent = true;
       fs.appendFileSync(auditPath,JSON.stringify(record)+'\n');emit(record);
       record.thinking=(task==='memory'||task==='questions')?'disabled':task==='story'?(config.storyThinking||'disabled'):'unchanged';
       record.maxCompletionTokens=task==='memory'?(config.memoryMaxTokens||2000):task==='story'?6000:3500;

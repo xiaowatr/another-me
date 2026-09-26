@@ -7,7 +7,7 @@ export function createStoryTasks({run,check=()=>{},now=Date.now,ttl=3600000,max=
  const records=new Map(),instanceId=randomUUID();
  function prune(){for(const [id,t]of records)if(t.status!=='running'&&now()-t.finishedAt>ttl)records.delete(id);}
  function own(owner,id){prune();const t=records.get(id);if(!t||t.owner!==owner)throw new AppError('task_missing',404);return t;}
- const view=t=>({taskId:t.id,operationId:t.operation.id,parentTaskId:t.parentTaskId,attempt:t.attempt,rewriteCount:t.operation.rewrites,cumulativeCallCount:t.operation.calls,instanceId,status:t.status,createdAt:t.createdAt,finishedAt:t.finishedAt,settingNote:t.settingNote||[],...(t.status==='succeeded'?{result:t.result}:{}),...(t.status==='failed'||t.status==='cancelled'?{error:t.error}: {})});
+ const view=t=>({taskId:t.id,operationId:t.operation.id,parentTaskId:t.parentTaskId,attempt:t.attempt,rewriteCount:t.operation.rewrites,cumulativeCallCount:t.operation.calls,storyCallCount:t.operation.stageCalls?.story??t.operation.calls,stageCallCounts:t.operation.stageCalls||{story:t.operation.calls,scenario:0,setting:0},instanceId,status:t.status,createdAt:t.createdAt,finishedAt:t.finishedAt,settingNote:t.settingNote||[],...(t.status==='succeeded'?{result:t.result}:{}),...(t.status==='failed'||t.status==='cancelled'?{error:t.error}: {})});
  return {instanceId,submit(owner,{taskId,input,instanceId:expected,parentTaskId=null,continuation=null}){
   if(!/^[a-f0-9-]{36}$/.test(taskId||'')||!input?.background)throw new AppError('input');
   if(expected!==instanceId)throw new AppError('task_expired',409);
@@ -15,7 +15,7 @@ export function createStoryTasks({run,check=()=>{},now=Date.now,ttl=3600000,max=
   if(old){if(old.owner!==owner)throw new AppError('task_missing',404);if(old.hash!==hash)throw new AppError('task_input_changed',409);return view(old);}
   let parent=null,operation;
   if(parentTaskId){parent=own(owner,parentTaskId);if(parent.status==='running')throw new AppError('busy',409);operation=parent.operation;
-   if(operation.lastTaskId!==parentTaskId||operation.calls>=STORY_MAX_MODEL_CALLS)throw new AppError('retry_exhausted',409);
+   if(operation.lastTaskId!==parentTaskId||(operation.stageCalls?.story??operation.calls)>=STORY_MAX_MODEL_CALLS)throw new AppError('retry_exhausted',409);
    if(continuation==='clarification'){if(parent.result?.kind!=='clarification')throw new AppError('input',422);}
    else if(continuation==='rewrite'){if(parent.status!=='failed'||operation.rewrites>=STORY_MAX_REWRITES||!retryableStoryFailure({...parent.error,terminal:true}))throw new AppError('retry_exhausted',409);}
    else throw new AppError('input',422);

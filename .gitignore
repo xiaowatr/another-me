@@ -57,3 +57,7 @@ tests/*
 !tests/questions72.test.js
 
 !tests/feedback73.test.js
+
+!tests/identity75.test.js
+!tests/time80.test.js
+!tests/scenario81.test.js

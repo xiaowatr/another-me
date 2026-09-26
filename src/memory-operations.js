@@ -25,7 +25,7 @@ export function applyMemoryOperations(life,batch){
  return {...life,memories:rows,sessionMeta:{...life.sessionMeta,appliedMemoryOperations:[...applied],memoryOutcome:changed?'changed':'unchanged'}};
 }
 export function candidateOperations(life,c){
- const base={sourceId:c.sourceId,type:c.type},operations=[];
+ const base={sourceId:c.sourceId,type:c.type,...(c.timeState?{timeState:c.timeState}:{})},operations=[];
  for(const [i,e] of (c.replacementEdits||[]).entries())operations.push({...base,id:c.id+':edit:'+i,kind:e.text?'update':'revoke',targetId:e.id,expectedText:e.previousText,text:e.text});
  if(c.origin==='model'&&c.requiresConfirmation&&c.confirmationKind==='add')return [{...base,id:c.id+':confirmed',kind:'add',targetId:c.id,text:c.text}];
  if(c.confirmTargetId){const target=life.memories.find(m=>m.id===c.confirmTargetId);if(!target)throw Error('memory_stale_target');if(c.expectedText!==undefined&&c.expectedText!==target.text)throw Error('memory_stale_target');return [{...base,id:c.id+':confirmed',kind:c.confirmationKind==='revoke'?'revoke':'update',targetId:target.id,expectedText:target.text,text:c.text}];}
