@@ -65,6 +65,7 @@ const server = http.createServer(async (req, res) => {
         catch(e){log({stage:'failed',category:e.category||'upstream',durationMs:Date.now()-receivedAt});throw e;}
       }
       if(pathname === '/api/session/restore')return json(res,200,withOwner(owner,()=>app.restore(input)));
+      if(pathname==='/api/questions')return json(res,200,await withOwner(owner,()=>app.questions(input)));
       if (pathname === '/api/story') return json(res,202,tasks.submit(owner,input));
       if(pathname==='/api/timing'){
         if(!/^[a-f0-9-]{36}$/.test(input.requestId || ''))throw new AppError('input');

@@ -182,3 +182,13 @@ src/chat-viewport.js以真实容器位置做增量校正，补文档滚动和输
 
 ## v69 导航同排与整理入口收敛
 “我的那些如果”移入标题行，资料面板统一“整理聊天”。invalid_response/task_expired自动使用现有一次恢复机会，预算与任务版本先持久化；没有无限重试，未知网络/配置/余额故障不自动新增付费调用。60项定向离线检查和三组隔离页面模拟通过，桌面/320px响应式检查通过；不代表真实模型或线上已验收。v69-local/memory-v8，index-Bq3mlHf_.js / index-CthaD0dQ.css。与v68改动一起按原Render方式发布前后端，模型和Build/Start不变。本地未提交推送部署，私密夹具和台账不提交。
+
+## v70 文风参考接入
+新增server/writing-style.js，故事和聊天使用统一表达边界及分开的少量认可示例；server/prompts.js接入普通/流式请求，src/chat-style.js清理重复长度规则及类型顺序。完整参考档案不删减，不运行时读取整篇文档。模型、token、重试、记忆及界面不变，无额外润色调用。两个故事输入与六个聊天情境的请求组装检查及身份回归共8项通过；构建通过，真实模型表达质量未测。v70-local/Prompt 2026-09-26.v32/style-reference-v1，前端仍index-Bq3mlHf_.js。未提交推送部署。发布必须包含新增server/writing-style.js及本轮代码，可包括合成tests/style70.test.js；本地日志台账不提交。沿用现有Render Build/Start，核对/api/status后端版本，前端哈希不作为本轮文风是否发布的唯一依据。
+
+## v71 用户表达适配
+在参考文风边界内，当前用户有依据的表达习惯优先于范例口吻与MBTI；沿用已传递初始与近期用户原文，不额外调用模型。两个故事输入、六种聊天情境的请求测试通过，真实模型适配质量未验证。v71-local/Prompt v33/style-reference-v2，前端资源不变；发布含server/writing-style.js及prompts/diagnostics，现有配置不变。本地未提交推送部署。
+
+## v72 动态补充题
+新增 src/question-bank.js、src/supplementary.js、src/SupplementaryQuestions.jsx、server/supplementary-planner.js，连同API、模型调用、生成上下文、表单/草稿和样式接入一起发布。31题按语义选0—3题，总展示不超过8；每组提交调用questions任务，不按输入字数触发。匿名用户/输入快照缓存、限流及并发保护沿用；选题使用当前模型、thinking disabled、3500输出额度，是独立于故事4次预算的新增模型调用。失败不无限自动重试，可保留答案直接生成；核心冲突须确认或修改。
+23项定向离线检查与隔离生产页面模拟通过，真实模型理解和情节落实质量尚未验证；0付费测试，未提交推送部署。v72-local / Prompt 2026-09-26.v34 / questions-v1，index-BGUSkg-V.js / index-PN3jeIkM.css。沿现有Render绑定分支、原Build/Start部署整个前后端，无新密钥或环境变量；核对/api/status的version/questionPlannerVersion及前端资源。保留旧存档，勿上传.local、私密台账、原始日志和用户附件。

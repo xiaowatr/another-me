@@ -1,0 +1,20 @@
+import {QUESTION_BY_ID} from './question-bank.js';
+const baseFields=['realityOutcome','hypotheticalDirection','birthYear','forkAge','locationText','gender','mbti','lifeSituation','choiceReason','details','followupAnswer'];
+export function supplementKey(b){const text=JSON.stringify(baseFields.map(k=>b[k]||''));let a=2166136261,c=5381;for(const x of text){a=Math.imul(a^x.charCodeAt(0),16777619);c=Math.imul(c,33)^x.charCodeAt(0);}return (a>>>0).toString(16)+(c>>>0).toString(16);}
+const blank=()=>({shown:[],answers:{},pages:[],page:0,questionMeta:{},confirmations:[],extra:'',plan:null});
+function envelope(b){try{const x=JSON.parse(b.supplementary||'{}');return x&&Array.isArray(x.contexts)?x:{contexts:[]};}catch{return {contexts:[]};}}
+export function supplementState(b){const contexts=envelope(b).contexts,exact=contexts.find(x=>x.key===supplementKey(b));if(exact)return exact.state;const previous=contexts[0]?.state;return previous?{...previous,plan:null,page:previous.pages.length,confirmations:[]}:blank();}
+export function saveSupplement(b,state){const key=supplementKey(b),old=envelope(b);return {...b,supplementary:JSON.stringify({contexts:[{key,state},...old.contexts.filter(x=>x.key!==key)].slice(0,3)})};}
+export function answerText(a){if(!a||a.skipped)return '';return [...(a.selected||[]).filter(x=>x!=='自己定起止时间'),a.text||''].filter(Boolean).join('；');}
+export function supplementSources(b){const s=supplementState(b);return [...baseFields.map(id=>({id,text:b[id]||''})),...Object.entries(s.answers).filter(([id,a])=>QUESTION_BY_ID[id]&&answerText(a)).map(([id,a])=>({id,text:answerText(a)})),...(s.confirmations||[]).map((text,i)=>({id:'confirmation:'+i,text})),{id:'extra',text:s.extra||''}].filter(x=>x.text);}
+export function supplementaryContext(b){const s=supplementState(b);return {answers:Object.entries(s.answers).filter(([id,a])=>QUESTION_BY_ID[id]&&answerText(a)).map(([id,a])=>({id,question:QUESTION_BY_ID[id].question,purpose:QUESTION_BY_ID[id].purpose,answerContext:s.answerScopes?.[id]||null,tense:s.questionMeta?.[id]?.tense||'original',selected:a.selected||[],text:a.text||'',meaning:'仅按原话理解；手写纠正优先于被纠正的选项，不确定保持未知；若answerContext与当前故事已不相干，则保留原文但不应用到当前剧情'})),skipped:Object.keys(s.answers).filter(id=>s.answers[id].skipped),extra:s.extra||'',confirmations:s.confirmations||[],expectations:s.plan?.expectations||null};}
+export function validateSupplement(b){
+ if(!b.supplementary)return;
+ if(typeof b.supplementary!=='string'||b.supplementary.length>65000)throw Error('supplement_input');
+ const e=JSON.parse(b.supplementary);if(!Array.isArray(e.contexts)||e.contexts.length>3)throw Error('supplement_input');
+ for(const {key,state:s} of e.contexts){if(typeof key!=='string'||key.length>32||!s||!Array.isArray(s.shown)||s.shown.length>8||new Set(s.shown).size!==s.shown.length||s.shown.some(id=>!QUESTION_BY_ID[id])||!s.answers||typeof s.answers!=='object'||Object.keys(s.answers).some(id=>!s.shown.includes(id))||!Array.isArray(s.confirmations)||s.confirmations.length>2||s.confirmations.some(t=>typeof t!=='string'||t.length>500)||typeof s.extra!=='string'||s.extra.length>500)throw Error('supplement_input');
+  for(const [id,a] of Object.entries(s.answers)){const q=QUESTION_BY_ID[id];if(!a||!Array.isArray(a.selected)||a.selected.length>(q.kind==='multi'?2:q.kind==='single'?1:0)||a.selected.some(v=>!q.options.includes(v)&&v!=='说不清／不愿透露')||typeof a.text!=='string'||a.text.length>500||typeof a.skipped!=='boolean')throw Error('supplement_input');}
+  if(!Array.isArray(s.pages)||s.pages.length>8||s.pages.some(p=>!Array.isArray(p)||p.length>3||p.some(id=>!s.shown.includes(id)))||!Number.isInteger(s.page)||s.page<0||s.page>s.pages.length)throw Error('supplement_input');
+  if(s.plan!=null&&(!Array.isArray(s.plan.questions)||s.plan.questions.length>3||s.plan.questions.some(q=>!q||!QUESTION_BY_ID[q.id])||(s.plan.conflict&&(!Array.isArray(s.plan.conflict.evidence)||typeof s.plan.conflict.question!=='string'||s.plan.conflict.evidence.some(e=>typeof e?.text!=='string')))))throw Error('supplement_input');
+ }
+}

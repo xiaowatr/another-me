@@ -51,3 +51,7 @@ tests/*
 !tests/memory67.test.js
 
 !tests/summary68.test.js
+
+!tests/style70.test.js
+
+!tests/questions72.test.js

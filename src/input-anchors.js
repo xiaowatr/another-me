@@ -1,3 +1,4 @@
+import {supplementState,answerText} from './supplementary.js';
 import {eventDate} from './age-validation.js';
 ﻿export const dateParts=text=>[...String(text||'').matchAll(/((?:18|19|20|21)\d{2})年(?:(\d{1,2})月(?:(\d{1,2})日)?)?/g)].map(m=>({year:+m[1],month:m[2]?+m[2]:null,...(m[3]?{day:+m[3]}:{}),text:m[0]})).filter(d=>d.month==null||d.month>=1&&d.month<=12);
 export function timeAnchors(b,now=new Date()){
@@ -77,6 +78,7 @@ export function hardQuestion(b){const conflicts=hardConflicts(applyClarification
 
 const smallNumber=s=>/^\d+$/.test(s)?Number(s):({'一':1,'二':2,'两':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'十':10}[s]??null);
 export function observationWindow(b,fork,now=new Date()){
+ const range=answerText(supplementState(b).answers.G14);if(range==='刚开始的几周'&&fork?.year&&!fork.month)return {months:1,weeks:3,anchor:'supplement-weeks',start:fork,end:null,precision:'unknown-month',sources:[{field:'supplementary.G14',text:range}]};if(range==='刚开始的几周'&&fork?.year){const start={year:fork.year,month:fork.month||1,day:fork.day||1},endDate=new Date(Date.UTC(start.year,start.month-1,start.day+20));return {months:1,anchor:'supplement-weeks',start,end:{year:endDate.getUTCFullYear(),month:endDate.getUTCMonth()+1,day:endDate.getUTCDate()},precision:'day',sources:[{field:'supplementary.G14',text:range}],assumption:!fork.month?'起始月份未知，三周为创作窗口，不能冒称用户给定具体日期':null};}if(range&&!range.includes('说不清'))b={...b,followupAnswer:range==='交给故事选'?'接下来两个月':range.replace('接下来一年','接下来12个月'),followupSkipped:''};
  for(const field of ['followupAnswer','details','hypotheticalDirection']){if(field==='followupAnswer'&&b.followupSkipped)continue;const text=b[field]||'',m=text.match(/(?:观察|只看|只写|看看|就看|看)[：:]?\s*((?:18|19|20|21)\d{2})年(\d{1,2})(?:月)?(?:—|–|-|至|到|和|、)(\d{1,2})月/);if(m&&+m[2]>=1&&+m[3]<=12&&+m[3]>=+m[2])return {months:+m[3]-+m[2]+1,anchor:'explicit-observation',start:{year:+m[1],month:+m[2]},end:{year:+m[1],month:+m[3]},precision:'month',sources:[{field,text:m[0]}]};}
 
  const sources=['hypotheticalDirection','details','followupAnswer'].filter(f=>f!=='followupAnswer'||!b.followupSkipped).flatMap(field=>String(b[field]||'').split(/[。；\n]/).flatMap(text=>{

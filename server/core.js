@@ -1,3 +1,4 @@
+import {validateSupplement} from '../src/supplementary.js';
 import {ageFieldErrors} from '../src/age-validation.js';
 import {strictJson,normalizeChapters} from './structured-story.js';
 import { MBTI_TYPES,activeBackground } from '../src/background.js';
@@ -53,6 +54,7 @@ export function parseResult(content, task, diagnostic = {}) {
   try { try{strictJson(content);}catch(e){if(e.message.startsWith('duplicate_field:'))throw new AppError('invalid_response',502,{stage:'schema',reason:'duplicate_field'});} data = decodeJson(content,diagnostic); }
   catch(e) { throw new AppError('invalid_response', 502, e.diagnostic || {stage:'parse',reason:'json_syntax'}); }
   if (!data || typeof data !== 'object' || Array.isArray(data)) throw new AppError('invalid_response', 502,{stage:'schema',reason:'object_required'});
+  if(task==='questions'){if(!Array.isArray(data.questions)||!Array.isArray(data.covered))throw new AppError('invalid_response',502);return data;}
   if(task==='memory'){if(!Array.isArray(data.operations))throw new AppError('invalid_response',502);return data;}
   if(task==='review'){if(!Array.isArray(data.checks))throw new AppError('invalid_response',502,{stage:'review',reason:'missing_review'});return data;}
   if (task === 'chat') {
@@ -85,6 +87,7 @@ export function parseResult(content, task, diagnostic = {}) {
   return { kind: 'story', title: data.title, ...(typeof data.synopsis==='string'?{synopsis:data.synopsis.slice(0,180)}:{}), identity: data.identity, intro: data.intro, character: data.character, opening: data.opening, scenes: data.scenes.map(({ time, title, text }) => ({ time, title, text })) };
 }
 export function validateBackground(b,{newSubmission=false}={}) {
+  try{validateSupplement(b||{});}catch{throw new AppError('input');}
   if(newSubmission&&Object.keys(ageFieldErrors(b||{})).length)throw new AppError('input',400,{fieldErrors:ageFieldErrors(b||{})});
   if(b && 'realityOutcome' in b){
     if(!['realityOutcome','hypotheticalDirection'].every(k=>str(b[k],k==='forkTime'?80:1500)) || typeof b.details!=='string' || b.details.length>1500) throw new AppError('input');

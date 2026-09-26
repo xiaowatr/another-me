@@ -7,7 +7,7 @@ export function createGuard({now=Date.now,modelLimit=20,apiLimit=600,peerLimit=4
  return {accept(peer,route){const m=Math.floor(now()/60000);if(m!==minute){minute=m;total=0;models=0;buckets.clear();}
  const count=(buckets.get(peer)||0)+1;buckets.set(peer,count);total++;
  if(count>peerLimit||total>apiLimit)return false;
- if(['/api/story','/api/chat/stream','/api/memory/extract'].includes(route)&&++models>modelLimit)return false;
+ if(['/api/story','/api/chat/stream','/api/memory/extract','/api/questions'].includes(route)&&++models>modelLimit)return false;
  return true;}};
 }
 const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.ico':'image/x-icon'};

@@ -1,3 +1,4 @@
+import {createPlannerTasks,plannerMessages,normalizePlan,PLANNER_VERSION} from './supplementary-planner.js';
 import {memoryMessages,normalizeMemoryResult} from './memory-extraction.js';
 import {storyClock} from '../src/story-clock.js';
 import {publicQuestion} from '../src/public-question.js';
@@ -21,6 +22,7 @@ import { AppError, validateBackground, parseResult } from './core.js';
 import { storyMessages, chatMessages, streamingChatMessages, PROMPT_VERSION } from './prompts.js';
 import { demoStory, demoProvider } from '../src/services/demo.js';
 export function createExperience(config, caller, recordLocal = () => {}) {
+  const questionTasks=createPlannerTasks(b=>exclusive('questions',async()=>{if(config.mode==='demo')return normalizePlan({questions:[],covered:[],expectations:{}},b);const response=await caller.call('questions',plannerMessages(b),{validateResult:r=>normalizePlan(r,b)});return {...normalizePlan(response.result,b),requestId:response.requestId};}));
   const sessions = new Map();
   const slots=createSlots(config.maxConcurrent||3);
   async function exclusive(task, fn) {
@@ -31,11 +33,12 @@ export function createExperience(config, caller, recordLocal = () => {}) {
     } catch (e) { upstreamRecorded = Boolean(e.requestId); category = e.category || 'upstream'; throw e; }
     finally {
       release?.();
-      if (!upstreamRecorded) recordLocal({requestId: randomUUID(),time:new Date().toISOString(),task,model:config.model,promptVersion:PROMPT_VERSION,durationMs:Date.now()-started,success,errorCategory:category,inputTokens:null,outputTokens:null,totalTokens:null,sent:false,mode:config.mode});
+      if (!upstreamRecorded) recordLocal({requestId: randomUUID(),time:new Date().toISOString(),task,model:config.model,promptVersion:task==='questions'?PLANNER_VERSION:PROMPT_VERSION,durationMs:Date.now()-started,success,errorCategory:category,inputTokens:null,outputTokens:null,totalTokens:null,sent:false,mode:config.mode});
     }
   }
   function session(id) { const s = sessions.get(id); if (!s || s.owner!==currentOwner() || Date.now() - s.updated > 2 * 60 * 60 * 1000) { if(s?.owner===currentOwner())sessions.delete(id); throw new AppError('session', 410); } return s; }
   return {
+    questions:input=>questionTasks(currentOwner(),validateBackground(migrateBackground(input.background))),
     checkAvailable:owner=>slots.check(owner),
     memory:(data,batchId)=>exclusive('memory',async()=>{const response=await caller.call('memory',memoryMessages(data),{memoryBatchId:batchId,validateResult:r=>normalizeMemoryResult(r,data,batchId)});return {...normalizeMemoryResult(response.result,data,batchId),requestId:response.requestId};}),
     restore(input){
@@ -80,7 +83,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       emit({type:'done',requestId:response.requestId});
       return {requestId:response.requestId};
     }),
-    status() { return {maxConcurrent:slots.limit,activeModelTasks:slots.active,storyThinking:config.storyThinking||'disabled',storyMaxCompletionTokens:6000, version:CODE_VERSION,commit:/^[a-f0-9]{40}$/.test(process.env.RENDER_GIT_COMMIT||'')?process.env.RENDER_GIT_COMMIT:null,promptVersion:PROMPT_VERSION,semanticReviewEnabled:Boolean(config.reviewStories),processStartedAt:PROCESS_STARTED_AT, mode: config.mode, site: config.site, model: config.model,  }; },
+    status() { return {maxConcurrent:slots.limit,activeModelTasks:slots.active,storyThinking:config.storyThinking||'disabled',storyMaxCompletionTokens:6000, version:CODE_VERSION,commit:/^[a-f0-9]{40}$/.test(process.env.RENDER_GIT_COMMIT||'')?process.env.RENDER_GIT_COMMIT:null,promptVersion:PROMPT_VERSION,questionPlannerVersion:PLANNER_VERSION,semanticReviewEnabled:Boolean(config.reviewStories),processStartedAt:PROCESS_STARTED_AT, mode: config.mode, site: config.site, model: config.model,  }; },
     story: (input,{signal,onSetting,rewriteFeedback}={}) => exclusive('story', async () => {
       const diagnosticCaseId=takeDiagnosticCase(input.background||{});
       let background = validateBackground(migrateBackground(applyClarification(input.background)),{newSubmission:true});

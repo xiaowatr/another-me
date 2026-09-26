@@ -17,6 +17,7 @@ import {storyWithRetry} from './story-retry.js';
 }
 const storyClient=createStoryClient(request);
 export const experience = {
+  planQuestions:(background,signal)=>request('/api/questions',{background},signal),
   extractMemory:input=>request('/api/memory/extract',input,undefined,input.batchId),
   memoryDiagnostic:input=>request('/api/memory/diagnostic',input).catch(()=>{}),
   cancelStory:()=>storyClient.cancel(),
