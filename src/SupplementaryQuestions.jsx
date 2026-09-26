@@ -1,3 +1,4 @@
+import {withoutOptionalAnalysis} from './question-recovery.js';
 import {questionTitle} from './question-context.js';
 import React,{useEffect,useRef,useState} from 'react';
 import {QUESTION_BY_ID as ORDINARY_BY_ID} from './question-bank.js';
@@ -11,8 +12,9 @@ const isUnknown=t=>/^(?:说不清|不确定|不愿透露|都不太符合|还没�
 const InkWait=()=> <span className="ink-wait"><span aria-hidden="true" className="ink-dots"><i/><i/><i/></span>正在读你写下的这些…</span>;
 export default function SupplementaryQuestions({background,onChange,onClose,onGenerate}){
  const [state,setState]=useState(()=>({...supplementState(background),recentScenarios:readScenarioHistory(localStorage)})),[busy,setBusy]=useState(false),[error,setError]=useState(''),[confirmation,setConfirmation]=useState(''),[progress,setProgress]=useState(''),[analysisFailed,setAnalysisFailed]=useState(false);
- const current=useRef(state),base=useRef(background),revision=useRef(0),pending=useRef(null),request=useRef(null),dialog=useRef(null),group=useRef(null),generating=useRef(false);
+ const current=useRef(state),base=useRef(background),revision=useRef(0),pending=useRef(null),request=useRef(null),dialog=useRef(null),group=useRef(null),generating=useRef(false),handedOff=useRef(false);
  function store(s){current.current=s;setState(s);base.current=saveSupplement(base.current,s);onChange(base.current);return base.current;}
+ function handoff(s){if(handedOff.current||s.plan?.conflict)return;const b=store(s);handedOff.current=true;generating.current=true;setBusy(false);onGenerate(b);}
  function invalidate(){revision.current++;request.current?.abort();request.current=null;pending.current=null;generating.current=false;setBusy(false);}
  function edit(s){if(s.scenario)s={...s,scenario:{...s.scenario,analysis:null}};invalidate();setError('');setAnalysisFailed(false);store({...s,plan:s.plan?.conflict?s.plan:s.plan?{...s.plan,expectations:null}:null});}
  function applyPlan(result,analysisOnly=false){const s=current.current;let scenario=s.scenario;const picked=result.questions.find(q=>SCENARIO_BY_ID[q.id]);if(picked&&!scenario){scenario={id:picked.id,answer:'',skipped:false,scopeKey:supplementKey(base.current),analysis:null};rememberScenario(localStorage,picked.id,scenario.scopeKey);}
@@ -21,20 +23,20 @@ export default function SupplementaryQuestions({background,onChange,onClose,onGe
   store({...s,scenario,plan:result,questionMeta:{...s.questionMeta,...Object.fromEntries(result.questions.map(q=>[q.id,q]))},shown:[...new Set([...s.shown,...ids])],pages:ids.length&&!exists?[...s.pages,ids]:s.pages,page:ids.length&&!exists?s.pages.length:Math.max(0,Math.min(s.page,s.pages.length-1))});
  }
  async function plan(s,analysisOnly=false){if(pending.current||(generating.current&&!analysisOnly))return null;invalidate();generating.current=analysisOnly;const version=revision.current,c=new AbortController();request.current=c;setBusy(true);setError('');setProgress('正在读你写下的这些…');const b=store(s);
-  try{const task=experience.planQuestions(b,c.signal,t=>{if(version===revision.current)setProgress(t);});pending.current=task;const result=await task;if(version!==revision.current)return null;applyPlan(result,analysisOnly);return {result,version};}
-  catch(e){if(version===revision.current){setError(e.message||'暂时没能读完，答案已经保留，可以直接生成。');if(analysisOnly)setAnalysisFailed(true);}return null;}
-  finally{if(version===revision.current){pending.current=null;setBusy(false);generating.current=false;}}
+  try{const task=experience.planQuestions(b,c.signal,t=>{if(version===revision.current)setProgress(t);});pending.current=task;const result=await task;if(version!==revision.current)return null;applyPlan(result,analysisOnly);if(result.optionalAnalysisUnavailable){store(withoutOptionalAnalysis(current.current));if(!analysisOnly)handoff(finish(true));}return {result,version};}
+  catch(e){if(version!==revision.current)return null;if(e.name==='AbortError')return null;const next=withoutOptionalAnalysis(current.current);store(next);if(next.plan.conflict){setError('已填写内容保留，请确认这处设定后继续。');return null;}if(!analysisOnly)handoff(finish(true));return {result:next.plan,version};}
+  finally{if(version===revision.current){pending.current=null;setBusy(false);if(!handedOff.current)generating.current=false;}}
  }
  useEffect(()=>{dialog.current.showModal();if(!current.current.plan&&(!current.current.pages.length||current.current.page>=current.current.pages.length))plan(current.current);return()=>{revision.current++;request.current?.abort();};},[]);
  useEffect(()=>{const y=window.scrollY,x=window.scrollX,body=document.body,old=body.getAttribute('style');Object.assign(body.style,{position:'fixed',top:-y+'px',left:-x+'px',width:'100%',overflow:'hidden'});const vv=window.visualViewport;const fit=()=>{dialog.current?.style.setProperty('--supplement-height',(vv?.height||window.innerHeight)+'px');dialog.current?.style.setProperty('--supplement-top',(vv?.offsetTop||0)+'px');};fit();vv?.addEventListener('resize',fit);vv?.addEventListener('scroll',fit);window.addEventListener('resize',fit);return()=>{vv?.removeEventListener('resize',fit);vv?.removeEventListener('scroll',fit);window.removeEventListener('resize',fit);if(old===null)body.removeAttribute('style');else body.setAttribute('style',old);window.scrollTo(x,y);};},[]);
  useEffect(()=>{group.current?.scrollTo({top:0});},[state.page,state.pages.length]);
  const ids=(state.pages[state.page]||[]).filter(id=>!['G12','G14'].includes(id)&&QUESTION_BY_ID[id]),conflict=state.plan?.conflict;
  function finish(all=false){const s=finishSupplementPage(current.current,all?current.current.shown:ids),q=s.scenario;if(q&&(!q.answer.trim()||unknownAnswer(q.answer)))s.scenario={...q,skipped:true,analysis:null};return s;}
- async function generate(){if(generating.current)return;generating.current=true;let s=finish(true);if(s.plan?.conflict){generating.current=false;return;}const task=pending.current,version=++revision.current;setBusy(true);store(s);
+ async function generate(){if(generating.current||handedOff.current)return;generating.current=true;let s=finish(true);if(s.plan?.conflict){generating.current=false;return;}const task=pending.current,version=++revision.current;setBusy(true);store(s);
   if(task){try{const result=await task;if(version!==revision.current)return;if(result.conflict){store({...current.current,plan:result});setBusy(false);generating.current=false;return;}if(s.scenario&&result.scenarioAnalysis)store({...current.current,scenario:{...s.scenario,analysis:result.scenarioAnalysis}});}catch{if(version!==revision.current)return;}}
   if(version!==revision.current)return;pending.current=null;s=current.current;const q=s.scenario;
-  if(q&&!q.skipped&&q.answer.trim()&&q.analysis?.key!==scenarioKey(q)&&!analysisFailed){generating.current=false;const out=await plan(s,true);if(!out||out.version!==revision.current)return;if(out.result.conflict)return;if(!current.current.scenario?.analysis){setAnalysisFailed(true);setError('这次情景回答暂时没能提炼。原答已保留，你可以跳过分析直接生成，情景原文不会放进故事。');return;}}
-  generating.current=true;setBusy(false);onGenerate(store(current.current));
+  if(q&&!q.skipped&&q.answer.trim()&&q.analysis?.key!==scenarioKey(q)&&!analysisFailed){generating.current=false;const out=await plan(s,true);if(!out||out.version!==revision.current)return;if(out.result.conflict)return;if(!current.current.scenario?.analysis)store(withoutOptionalAnalysis(current.current));}
+  handoff(current.current);
  }
  function changeAnswer(id,a){if(SCENARIO_BY_ID[id]){edit({...current.current,scenario:{...current.current.scenario,answer:a.text,skipped:a.skipped,analysis:null}});return;}edit({...current.current,answerScopes:{...current.current.answerScopes,[id]:{realityOutcome:base.current.realityOutcome,hypotheticalDirection:base.current.hypotheticalDirection}},answers:{...current.current.answers,[id]:a}});}
  function move(page){invalidate();store({...current.current,page});}

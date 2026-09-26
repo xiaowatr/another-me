@@ -22,7 +22,7 @@ export function textFilter(){
       if(pending[0]==='<'){
         const end=pending.indexOf('>');if(end<0)break;
         const tag=pending.slice(0,end+1).toLowerCase();pending=pending.slice(end+1);
-        if(tag==='<think>')thinking=true;else if(tag==='</think>')thinking=false;
+        if(tag==='<think>')thinking=true;else if(tag==='</think>')thinking=false;else if(!thinking&&/^<br\s*\/?>$|^<\/?(?:p|div)\s*>$/.test(tag))out+='\n';
         continue;
       }
       const next=pending.indexOf('<');const n=next<0?pending.length:next;

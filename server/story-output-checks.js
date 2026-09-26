@@ -6,9 +6,13 @@ export function storyOutputIssues(story,background){
  for(const [i,scene] of (story.scenes||[]).entries())for(const key of ['time','title','text'])fields.push({field:`scenes.${i}.${key}`,text:scene[key]});
  const sources=supplementSources(background).map(s=>s.text);
  const gender=roleGender(background),issues=[];
+ const workKnown=/(?:工作|上班|任职|职员|创业|接单|实习)/.test(background.lifeSituation||'')||sources.some(t=>/(?:我|自己)(?:当时|现在|一直|原来)?(?:在[^，。；]{0,12}(?:工作|上班|任职)|是[^，。；]{0,8}(?:老师|教师|工程师|职员|设计师)|(?:工作|上班|实习|加班))/.test(t));
  const knownSiblings=new Set(sources.flatMap(t=>siblingClaims(t)));
  if(inventedOpeningInteraction(story.opening))issues.push({field:'opening',reason:'invented_opening_interaction'});
  for(const {field,text} of fields){if(typeof text!=='string')continue;
+  const narrativeText=text.replace(/[“「『"][^”」』"]*[”」』"]/g,'');
+  if(!workKnown&&/(?:我(?:还是|仍然|会|每周[一二三四五六日天]|下周[一二三四五六日天]|周[一二三四五六日天])*[^，。；！？]{0,12}从公司(?:那边)?|(?:我|下周[一二三四五六日天]|周[一二三四五六日天])(?:[，, ]|刚好|正好|今天|明天|不用|不|要|得){0,10}(?:加班|下班))/.test(narrativeText))issues.push({field,reason:'unprovided_protagonist_work'});
+  if(!gender&&['intro','character','identity'].includes(field)&&/^(?:这一次|这次|现在|当时|另一个自己)?[，, ]*[她他](?=按|报|走|去|选|决定|留|离|把|在|是|没|不)/.test(narrativeText.trim()))issues.push({field,reason:'unprovided_protagonist_gender'});
   if(siblingClaims(text).some(k=>!knownSiblings.has(k)))issues.push({field,reason:'unprovided_family_member'});
   if(/没(?:有)?说[“"]([^”"。！？]{1,12})[”"](?:却|就|又|还)(?:说|说了)[“"]\1[”"]/.test(text))issues.push({field,reason:'contradictory_repeated_phrase'});
   const paragraphs=text.split(/\n\s*\n/).map(t=>t.trim()).filter(t=>t.length>=50);if(new Set(paragraphs).size<paragraphs.length)issues.push({field,reason:'duplicated_story_paragraph'});

@@ -1,9 +1,10 @@
-﻿import MemoryFailureDetails from './MemoryFailureDetails.jsx';
+import {storyText} from './story-text.js';
+import MemoryFailureDetails from './MemoryFailureDetails.jsx';
 import React,{useState} from 'react';
 import {reviewStory} from './fact-frame.js';
 import {archiveName} from './story-input';
 import {sortedLives} from './postal-state.js';
-function summary(l){const safe=reviewStory(l.story,l.background,l.memories||[]).trusted;const text=safe.intro||safe.scenes?.[0]?.text||'那次不同的开始，留下了一封来信。';return text.split(/[。！？]/)[0].slice(0,90)+'。';}
+function summary(l){const safe=reviewStory(l.story,l.background,l.memories||[]).trusted;const text=safe.intro||safe.scenes?.[0]?.text||'那次不同的开始，留下了一封来信。';return storyText(text).split(/[。！？]/)[0].slice(0,90)+'。';}
 export default function LifeHome({library,onOpen,onNew,onDelete,onRename,notice}){
  const [selected,setSelected]=useState(null),[deleting,setDeleting]=useState(null),[renaming,setRenaming]=useState(null),[name,setName]=useState(''),[page,setPage]=useState(0);
  const ordered=sortedLives(library),pages=Math.max(1,Math.ceil(ordered.length/6)),current=Math.min(page,pages-1),items=ordered.slice(current*6,current*6+6);
