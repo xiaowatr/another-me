@@ -1,24 +1,18 @@
-// A writing aid, not personality facts or additional model evaluation.
-export function chatStyle(background={},context={},message=''){
- const type=/^[IE][NS][FT][JP]$/.test(background.mbti||'')?background.mbti:null;
- const axes={
-  initiative:type?.[0]==='I'?'偏克制：先接住眼前话题，少主动扩展；可以认真交流，不装冷漠':type?.[0]==='E'?'较主动：接话时可分享一件自己的相关小事，不连发话题或盘问':'随当前话题接话，不固定主动程度',
-  directness:type?.[2]==='T'?'可偏直接具体，但不固定先分析；可以不同意，坦率但不刻薄':type?.[2]==='F'?'可留意对方在意的人与关系，不固定回应顺序，也不自动附和':'按问题直接回应，不默认劝慰',
-  emotion:type?.[2]==='F'?'简短回应具体感受；不把闲聊都解读成求安慰':type?.[2]==='T'?'有情绪时可以简短承认，不默认安慰或给解决方案':'需要时回应感受，平常像熟人聊天',
-  humor:type?.[1]==='N'?'可用轻巧联想、意外比喻或自嘲，不强行抖机灵':type?.[1]==='S'?'可拿眼前的具体生活小事开玩笑或吐槽，不编重大经历':'有合适语境再开玩笑，也允许平实的一句',
-  length:'长短随这次内容变化，一句足够就停，复杂感受可展开；按完整意思分句分段，不把所有理由和反问串成一个长句，不凑字数或段数'
- };
- const preferences=[...(context.preferences||[]).filter(m=>m.sourceRole!=='assistant').map(m=>m.text),...String(background.details||'').split(/[。；\n]/)].filter(t=>/交流偏好：|(?:别|不要|不用)(?:总是|每次)?(?:安慰|给建议|追问)|(?:回复|回答|说话|聊天).*(?:简短|直接|详细|安慰|建议|玩笑|提问)/.test(t)).slice(-3);
- const requests=[...preferences,message];
- // Explicit requests tune this reply only. Facts/memories themselves are never modified.
- for(const text of requests){
-  if(/(?:别|不要|不用)(?:总是|每次)?(?:安慰|劝)/.test(text))axes.emotion='不主动安慰或劝说，正常回应具体内容';
-  if(/(?:直接(?:点|一点|说|回答)|直说)/.test(text))axes.directness='直说具体看法，不先绕一段安慰；仍保持尊重';
-  if(/(?:简短(?:点|一点)|短一点|只(?:说|回|用)一句)/.test(text))axes.length='这轮尽量一句简短回应，不附加总结或问题';
-  if(/(?:详细(?:说|讲|分析|解释)|展开(?:说|讲)|仔细分析)/.test(text)&&!/(?:别|不要|不用).{0,4}(?:详细|展开|分析)/.test(text))axes.length='这轮按要求展开，围绕问题解释，不凑字数';
-  if(/(?:先听我说|只想让你听|别给建议|不要给建议)/.test(text))axes.initiative='先听和回应，不抢着扩展话题或给建议';
- }
- const facts=context.parallelCharacter?.storyFacts||{};
- const evidence=[facts.character,facts.intro,...(facts.scenes||[]).map(s=>s.text),...(context.parallelCharacter?.confirmed||[]).map(m=>m.text)].filter(Boolean).flatMap(t=>String(t).split(/(?<=[。！？])/)).filter(t=>t.length<=160&&/学会|变得|习惯|不再|更敢|慢慢/.test(t)&&!/[？?]|如果|打算|计划|希望/.test(t)).slice(-2);
- return {axes,experienceAnchors:evidence,explicitCommunication:preferences,priority:'事实和记忆边界优先；本轮明确要求＞已确认交流偏好＞用户原文的表达线索＞已有经历中的具体变化＞类型倾向。经历仅作有来源的调整依据，不据职业或一句话定人格；不必每轮表现全部维度。'};
+import {supplementaryContext} from './supplementary.js';
+// Preserve evidence and scope; do not infer intent or personality with keyword switches.
+export function chatStyle(background={},context={},message='',history=[]){
+ const p=supplementaryContext(background);
+ const sources=[
+  ...(context.preferences||[]).filter(m=>m.sourceRole!=='assistant').map(m=>({source:'confirmedPreference',text:m.text})),
+  ...['realityOutcome','hypotheticalDirection','choiceReason','lifeSituation','details'].filter(k=>background[k]).map(k=>({source:k,text:background[k]})),
+  ...(!background.followupSkipped&&background.followupAnswer?[{source:'clarification',text:background.followupAnswer}]:[]),
+  ...p.answers.map(a=>({source:'ordinaryAnswer:'+a.id,question:a.question,answerContext:a.answerContext,selected:a.selected,text:a.text})),
+  ...(p.extra?[{source:'supplementExtra',text:p.extra}]:[]),
+  ...p.confirmations.map(text=>({source:'confirmation',text})),
+  ...history.filter(m=>m.role==='user').map(m=>({source:'recentUser',text:m.content})).slice(-8),
+  {source:'currentUser',text:message}
+ ];
+ return {communicationSources:sources,mbtiHint:/^[IE][NS][FT][JP]$/.test(background.mbti||'')?background.mbti:null,
+ scope:'逐条按完整语境理解交流意愿和表达证据；来源包含事实、偏好、引语，不意味着每项都是对角色的要求。最新明确要求优先，引用别人的话不当本人指令；普通回答保留适用背景。点选不等于用户措辞，MBTI不推断人格或覆盖原话。',
+ priority:'本轮明确意愿＞仍适用的已确认偏好和原话＞表达示范。先辨明这句话在问谁的什么、想听什么，再回应；不要按关键词选择语气或道歉对象。'};
 }

@@ -126,3 +126,5 @@
 .supplement-dialog .question-options button>.option-ink{inset:-5px -4px;width:calc(100% + 8px);height:calc(100% + 10px)}
 .supplement-dialog .question-options button:focus-visible{outline:2px solid #355343;outline-offset:2px}
 @media(hover:hover) and (pointer:fine){.supplement-dialog .question-options button:not([aria-pressed=true]):hover{background:#35534309}}
+
+.supplement-save-note{margin:0;text-align:center}.supplement-wait p{margin:8px 0}.supplement-dialog .supplement-skip{width:100%;white-space:normal;overflow-wrap:anywhere}.form-top{display:flex;gap:16px;flex-wrap:wrap}.life-home>.page-top{align-items:center}.life-home>.page-top h1{margin:0}.life-home>.page-top>.text-button{white-space:nowrap}
