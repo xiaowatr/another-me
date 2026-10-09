@@ -61,3 +61,14 @@ tests/*
 !tests/identity75.test.js
 !tests/time80.test.js
 !tests/scenario81.test.js
+
+# Synthetic wording-contract and failure-diagnostic regressions only.
+!tests/questions102.test.js
+
+# Synthetic key-unknown information-chain regressions.
+!tests/questions103.test.js
+
+# Synthetic bounded candidate selection tests.
+!tests/sequential113.test.js
+
+!tests/request114.test.js

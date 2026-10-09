@@ -1,3 +1,4 @@
+import {createDraftArchive} from './story-drafts.js';
 import {consumeStoryCall} from './story-stage-budget.js';
 import {memoryClientRecord} from './memory-diagnostic.js';
 import {createMemoryTasks} from './memory-extraction.js';
@@ -19,11 +20,11 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 process.chdir(root);
 const production = process.env.NODE_ENV === 'production' || process.argv.includes('--production');
 if (!production && fs.existsSync('.env')) { try { loadEnvFile('.env'); } catch { console.error('本地环境配置无法加载，请检查 .env 格式。'); process.exit(1); } }
-const config = {...loadConfig(process.env),reviewStories:false};
+const config = loadConfig(process.env);
 const caller = createCaller(config);
 
 const app = createExperience(config, caller, record => { try { fs.appendFileSync('.local/requests.jsonl', JSON.stringify(record) + '\n'); } catch { throw new AppError('local_storage', 500); } });
-const tasks=createStoryTasks({check:owner=>app.checkAvailable(owner),run:(input,{owner,signal,taskId,parentTaskId,operation,onSetting,rewriteFeedback})=>withOwner(owner,()=>{const headers={};const fake={setHeader:(k,v)=>headers[k]=v,statusCode:200};const trace=makeStoryTrace(fake,taskId,{detached:true,onModelStart:(task,stage)=>consumeStoryCall(operation,task,stage)});Object.assign(trace.record,{operationId:operation.id,parentTaskId,attempt:operation.attempts,rewriteCount:operation.rewrites});trace.record.ownerTag=owner.slice(0,12);trace.record.taskId=taskId;return trace.run(()=>app.story(input,{signal,onSetting,rewriteFeedback})).catch(e=>{fake.statusCode=e.status||500;throw e;}).finally(()=>{trace.record.cumulativeCallCount=operation.calls;trace.record.stageCallCounts=operation.stageCalls;trace.complete();});})});
+const tasks=createStoryTasks({archive:createDraftArchive(),check:owner=>app.checkAvailable(owner),run:(input,{owner,signal,taskId,parentTaskId,operation,onSetting,onDraft,poolState})=>withOwner(owner,()=>{const headers={};const fake={setHeader:(k,v)=>headers[k]=v,statusCode:200};const trace=makeStoryTrace(fake,taskId,{detached:true,onModelStart:(task,stage)=>consumeStoryCall(operation,task,stage)});Object.assign(trace.record,{operationId:operation.id,parentTaskId,attempt:operation.attempts,candidateCount:operation.pool?.generated||0});trace.record.ownerTag=owner.slice(0,12);trace.record.taskId=taskId;return trace.run(()=>app.story(input,{signal,onSetting,onDraft,poolState})).catch(e=>{fake.statusCode=e.status||500;throw e;}).finally(()=>{trace.record.cumulativeCallCount=operation.calls;trace.record.stageCallCounts=operation.stageCalls;trace.complete();});})});
 const memoryTasks=createMemoryTasks({instanceId:tasks.instanceId,run:(data,batchId)=>app.memory(data,batchId)});
 const port = Number(process.env.PORT || 5173);
 const publicOrigin = process.env.APP_ORIGIN || process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
@@ -66,7 +67,7 @@ const server = http.createServer(async (req, res) => {
         catch(e){log({stage:'failed',category:e.category||'upstream',durationMs:Date.now()-receivedAt});throw e;}
       }
       if(pathname === '/api/session/restore')return json(res,200,withOwner(owner,()=>app.restore(input)));
-      if(pathname==='/api/questions')return json(res,200,await withOwner(owner,()=>app.questions(input)));
+      if(pathname==='/api/questions'){const result=await withOwner(owner,()=>app.questions(input));if(process.env.REQUEST_DIAGNOSTICS!=='0'&&result.planDiagnostics)console.info(JSON.stringify({type:'question_plan_result',requestId,modelRequestId:result.requestId||null,codeVersion:app.status().version,...result.planDiagnostics}));return json(res,200,result);}
       if (pathname === '/api/story') return json(res,202,tasks.submit(owner,input));
       if(pathname==='/api/timing'){
         if(!/^[a-f0-9-]{36}$/.test(input.requestId || ''))throw new AppError('input');

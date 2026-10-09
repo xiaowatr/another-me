@@ -8,6 +8,7 @@ export class AppError extends Error {
   constructor(category, status = 400, diagnostic = null) { super(category); this.category = category; this.status = status; this.diagnostic=diagnostic; }
 }
 export const errorMessages = {
+  setting_not_met: '本次没能按你的设定完成，填写内容和草稿已保留。可以重试。',
   output_limit: '这次生成用尽了输出额度，故事未完成。填写内容已保留，请稍后手动重试。',
   capacity: '当前体验人数较多，请稍后再试。填写内容已保留。',
   identity: '未能识别此浏览器的连接。请保留草稿，刷新页面后重试；已有故事不会因此删除。',
@@ -27,7 +28,7 @@ export const errorMessages = {
   content: '本次内容无法由模型处理，请调整输入后重试。',
   input: '请检查输入内容；必填内容不能为空，且不能超过长度限制。',
   session: '当前故事会话已失效，请返回重新生成。',
-  retry_exhausted: '这次生成或检查已达到本环节的尝试上限，仍未完成。填写内容已保留。',
+  retry_exhausted: '这次生成已达到尝试上限。填写内容和已有草稿已保留。',
   busy: '已有请求处理中，请等待完成。',
   memory_full: '本轮已保存较多纠正信息。请将最新信息整理到背景中，重新生成一个故事。',
   local_storage: '本地请求记录无法写入，已停止调用。请检查项目文件夹权限。',
@@ -56,12 +57,20 @@ export function parseResult(content, task, diagnostic = {}) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) throw new AppError('invalid_response', 502,{stage:'schema',reason:'object_required'});
   if(task==='questions'){if(!Array.isArray(data.questions)||!Array.isArray(data.covered))throw new AppError('invalid_response',502);return data;}
   if(task==='memory'){if(!Array.isArray(data.operations))throw new AppError('invalid_response',502);return data;}
-  if(task==='review'){if(!Array.isArray(data.checks))throw new AppError('invalid_response',502,{stage:'review',reason:'missing_review'});return data;}
   if (task === 'chat') {
     if (!str(data.reply, 2500) || !['none', 'reality', 'fiction'].includes(data.updateType)) throw new AppError('invalid_response', 502);
     return { reply: data.reply, updateType: data.updateType };
   }
   if (data.kind === 'clarification' && str(data.question, 300)) return { kind: 'clarification', question: data.question };
+  const fixed=Object.keys(data).filter(k=>/^chapter\d+$/.test(k));
+  if(fixed.length){
+    if(fixed.some(k=>!/^chapter[1-4]$/.test(k)))throw new AppError('invalid_response',502,{stage:'schema',reason:'chapter_count'});
+    if(Object.hasOwn(data,'scenes')||Object.keys(data).some(k=>/^scene_\d+_/.test(k)))throw new AppError('invalid_response',502,{stage:'schema',reason:'mixed_chapter_formats'});
+    if(![1,2,3].every(i=>data['chapter'+i]&&typeof data['chapter'+i]==='object'))throw new AppError('invalid_response',502,{stage:'schema',reason:'missing_fixed_chapter'});
+    const chapters=[data.chapter1,data.chapter2,data.chapter3,...(data.chapter4==null?[]:[data.chapter4])];
+    if(chapters.some(x=>!x||typeof x!=='object'||Array.isArray(x)||!['time','title','text'].every(k=>typeof x[k]==='string'&&x[k].trim())))throw new AppError('invalid_response',502,{stage:'schema',reason:'missing_or_empty_chapter'});
+    data={...data,scenes:chapters};diagnostic.chapterFormat='fixed_slots';
+  }
   if(Object.hasOwn(data,'scene_text') && Object.hasOwn(data,'scene_3_text') && data.scene_text!==data.scene_3_text)throw new AppError('invalid_response',502,{stage:'schema',reason:'conflicting_chapter_alias'});
   if(typeof data.scene_text==='string' && !Object.hasOwn(data,'scene_3_text') && ['scene_1_time','scene_1_title','scene_1_text','scene_2_time','scene_2_title','scene_2_text','scene_3_time','scene_3_title'].every(k=>typeof data[k]==='string')){data={...data,scene_3_text:data.scene_text};delete data.scene_text;diagnostic.chapterFieldAlias='scene_text_to_scene_3_text';}
   const flatNumbers=Object.keys(data).flatMap(k=>/^scene_(\d+)_(?:time|title|text)$/.test(k)?[Number(k.match(/^scene_(\d+)_/)[1])]:[]);
@@ -83,6 +92,7 @@ export function parseResult(content, task, diagnostic = {}) {
     const reason=code==='missing_or_empty_body'?'missing_or_empty_chapter':code==='body_too_long'?'chapter_body_too_long':code;
     throw new AppError('invalid_response',502,{stage:'schema',reason,...(index!==undefined?{field:'scenes.'+index}:{}),...(code==='chapter_count'?{actualCount:data.scenes.length,minCount:3,maxCount:4}:{})});
   }
+  if(diagnostic.fixedThreeChapters&&data.scenes?.length!==3)throw new AppError('invalid_response',502,{stage:'schema',reason:'chapter_count',actualCount:data.scenes?.length,minCount:3,maxCount:3});
   if ((data.kind !== undefined && data.kind !== 'story') || !['title', 'identity', 'intro', 'character', 'opening'].every(k => str(data[k], 2000)) || !Array.isArray(data.scenes) || (data.scenes.length < 3 || data.scenes.length > 4) || !data.scenes.every(s => str(s.time, 60) && str(s.title, 150) && str(s.text, 2000))) throw new AppError('invalid_response', 502,{stage:'schema',reason:'story_fields'});
   return { kind: 'story', title: data.title, ...(typeof data.synopsis==='string'?{synopsis:data.synopsis.slice(0,180)}:{}), identity: data.identity, intro: data.intro, character: data.character, opening: data.opening, scenes: data.scenes.map(({ time, title, text }) => ({ time, title, text })) };
 }
@@ -141,7 +151,7 @@ export function completeEnvelope(text){
  if(c==='"' || c==="'"){quote=c;continue;}if(c==='{'||c==='[')stack.push(c);else if(c==='}'||c===']'){if(stack.pop()!==(c==='}'?'{':'['))return false;}}
  return !quote && stack.length===0;
 }
-function decodeJson(content,diagnostic){
+export function decodeJson(content,diagnostic={}){
  const text=cleanContent(content).replace(/^﻿/,'').replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
  try{const data=JSON.parse(text);diagnostic.parseMode='strict';return data;}catch{}
  if(!text.startsWith('{') || !text.endsWith('}'))throw new AppError('invalid_response',502,{stage:'parse',reason:'json_envelope'});

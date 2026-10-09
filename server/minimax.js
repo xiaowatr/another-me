@@ -1,9 +1,11 @@
+import {receiveStructured} from './structured-response.js';
+import {createFailureEvidence} from './failed-outputs.js';
 import {PLANNER_VERSION} from './supplementary-planner.js';
 import {activeStoryTrace} from './story-timing.js';
 import {MEMORY_PROMPT_VERSION} from './memory-extraction.js';
 import {CODE_VERSION,redactEvidence} from './diagnostics.js';
 import {strictJson} from './structured-story.js';
-import {storyTools} from './story-tools.js';
+import {storyTools,fieldRepairTools} from './story-tools.js';
 import { captureUsage } from './usage.js';
 ﻿import { readSSE, textFilter } from './stream.js';
 import fs from 'node:fs';
@@ -13,10 +15,12 @@ import { AppError, classify, parseResult, responseShape } from './core.js';
 import { PROMPT_VERSION } from './prompts.js';
 export function createCaller(config, { fetchImpl = fetch, directory = '.local', timeoutMs = 90000, log = line=>console.info(line), env=process.env } = {}) {
   fs.mkdirSync(directory, { recursive: true });
-  const capturedCases=new Set();
+  const capturedCases=new Set(),failureEvidence=createFailureEvidence(path.join(directory,'failed-outputs'));
   const emit=record=>{if(env.REQUEST_DIAGNOSTICS!=='0')log(JSON.stringify({type:'model_diagnostic',...record}));};
   const auditPath = path.join(directory, 'requests.jsonl');
   async function call(task, messages, options = {}) {
+    if(!['story','chat','memory','questions'].includes(task))throw new AppError('configuration',500);
+    let failureOutput=null;
     const model=task==='memory'?(config.memoryModel||'MiniMax-M3'):config.model;const trace=activeStoryTrace();const started = Date.now();
     const record = { operationId:trace?.record.operationId||null,parentTaskId:trace?.record.parentTaskId||null,attempt:trace?.record.attempt||null,codeVersion:CODE_VERSION,actualModel:null,failureStage:null,failureReason:null,requestedRange:options.diagnosticRange||null, requestId: randomUUID(), time: new Date().toISOString(), task, model, promptVersion: task==='memory'?MEMORY_PROMPT_VERSION:task==='questions'?PLANNER_VERSION:PROMPT_VERSION, durationMs: 0, success: false, errorCategory: null, inputTokens: null, outputTokens: null, totalTokens: null, sent: false, site:config.site, usageSource:null, cachedTokens:null, auditGroup:options.auditGroup || null, status:'pending',parentRequestId:options.parentRequestId||null };
     if(task==='memory')record.memoryBatchId=options.memoryBatchId||null;
@@ -29,15 +33,18 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       if (config.mode !== 'real') throw new AppError('configuration');
       try { fs.appendFileSync(auditPath, ''); } catch { throw new AppError('local_storage',500); }
       options.onStart?.(record.requestId);
-      trace?.modelStart(record.requestId,config.model,task,options.reviewStage);record.sent = true;
+      trace?.modelStart(record.requestId,config.model,task);record.sent = true;
       fs.appendFileSync(auditPath,JSON.stringify(record)+'\n');emit(record);
-      record.thinking=(task==='memory'||task==='questions')?'disabled':task==='story'?(config.storyThinking||'disabled'):'unchanged';
-      record.maxCompletionTokens=task==='memory'?(config.memoryMaxTokens||2000):task==='story'?6000:3500;
+      const noThinking=task==='memory'||task==='questions';
+      record.thinking=noThinking?'disabled':task==='story'?(config.storyThinking||'disabled'):'unchanged';
+      record.maxCompletionTokens=options.repairFields?1200:task==='memory'?(config.memoryMaxTokens||2000):task==='story'?6000:3500;
+      const transportTools=task==='story'?(options.repairFields?fieldRepairTools(options.repairFields):storyTools(messages)):null;
+      if(options.repairFields)record.repairFields=options.repairFields;
       stage('transport');
       const response = await fetchImpl(`${config.base}/chat/completions`, {
         method: 'POST', redirect: 'error',
         headers: { 'Authorization': `Bearer ${config.key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, messages, ...((task==='memory'||task==='questions')?{thinking:{type:'disabled'}}:task==='story'?{thinking:{type:config.storyThinking||'disabled'}}:{}), ...(task==='story'?{tools:storyTools(messages)}:{}), stream: Boolean(options.onText), ...(options.onText ? {stream_options:{include_usage:true}} : {}), reasoning_split: true, temperature: 1, max_completion_tokens: record.maxCompletionTokens }),
+        body: JSON.stringify({ model, messages, ...(noThinking?{thinking:{type:'disabled'}}:task==='story'?{thinking:{type:config.storyThinking||'disabled'}}:{}), ...(transportTools?{tools:transportTools}:{}), stream: Boolean(options.onText), ...(options.onText ? {stream_options:{include_usage:true}} : {}), reasoning_split: true, temperature: 1, max_completion_tokens: record.maxCompletionTokens }),
         signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
       });
       record.httpStatus=response.status;
@@ -63,6 +70,7 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       stage('response_body');
       let body;
       try { body = await response.json(); } catch { throw new AppError(response.ok ? 'invalid_response' : classify(response.status, null), 502); }
+      failureOutput=body.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments??body.choices?.[0]?.message?.content;
       captureUsage(record,body.usage);if(typeof body.model==='string'&&/^[a-zA-Z0-9_.-]{1,80}$/.test(body.model))record.actualModel=body.model;
       evidence(body.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments??body.choices?.[0]?.message?.content);
       record.responseShape = responseShape(body);
@@ -79,15 +87,24 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       stage('parse_and_schema');record.parsing={};
       let content=choice.message?.content;
       if(structured){
-        const allowed=storyTools(messages).map(t=>t.function.name);
+        const allowed=transportTools.map(t=>t.function.name);
         record.toolStructure={violation:!Array.isArray(calls)?'not_array':calls.length!==1?'call_count':!allowed.includes(calls[0]?.function?.name)?'unapproved_function':typeof calls[0]?.function?.arguments!=='string'?'argument_type':null,isArray:Array.isArray(calls),count:Array.isArray(calls)?calls.length:null,items:Array.isArray(calls)?calls.slice(0,5).map(c=>({functionPresent:!!c?.function,nameAllowed:allowed.includes(c?.function?.name),argumentType:typeof c?.function?.arguments,argumentLength:typeof c?.function?.arguments==='string'?c.function.arguments.length:null})):[]};
         if(!Array.isArray(calls)||calls.length!==1||!allowed.includes(calls[0]?.function?.name)||typeof calls[0]?.function?.arguments!=='string')throw new AppError('invalid_response',502,{stage:'schema',reason:'invalid_story_tool'});
         content=calls[0].function.arguments;try{strictJson(content);}catch(e){throw new AppError('invalid_response',502,{stage:'schema',reason:e.message.startsWith('duplicate_field:')?'duplicate_field':'invalid_tool_json'});}record.storyTransport='tool_arguments';
-      }else {if(calls?.length)throw new AppError('invalid_response',502,{stage:'finish',reason:'unexpected_tool_finish'});record.storyTransport=task==='story'?'content_json':null;}
+      }else {if(calls?.length)throw new AppError('invalid_response',502,{stage:'finish',reason:'unexpected_tool_finish'});record.storyTransport=transportTools?'content_json':null;}
       record.outputEvidence={length:typeof content==='string'?content.length:null,sha256:typeof content==='string'?createHash('sha256').update(content).digest('hex'):null};
-      const result = parseResult(content, task,record.parsing);
+      if(transportTools){
+        const received=receiveStructured(content,task,transportTools,messages,record.parsing);
+        record.schemaValidation={valid:received.errors.length===0,errors:received.errors.slice(0,60),repairs:received.repairs};
+        if(received.errors.length){throw new AppError('invalid_response',502,{stage:'schema',reason:'structured_schema',field:received.errors[0].path});}
+        content=JSON.stringify(received.data);
+      }
+      const normalizedParsing=transportTools?{}:record.parsing;
+      if(task==='story')normalizedParsing.fixedThreeChapters=true;
+      const result = options.repairFields?JSON.parse(content):parseResult(content, task,normalizedParsing);
+      if(transportTools)for(const [key,value]of Object.entries(normalizedParsing))if(key!=='parseMode')record.parsing[key]=value;
       record.parsedShape={kind:result.kind||null,sceneCount:Array.isArray(result.scenes)?result.scenes.length:null,sceneBodyLengths:result.scenes?.map(s=>typeof s.text==='string'?s.text.length:null)||null};
-      if(structured&&result.kind!==(calls[0].function.name==='submit_story'?'story':'clarification'))throw new AppError('invalid_response',502,{stage:'schema',reason:'tool_kind_mismatch'});
+      if(structured&&task==='story'&&result.kind!==(calls[0].function.name==='submit_story'?'story':'clarification'))throw new AppError('invalid_response',502,{stage:'schema',reason:'tool_kind_mismatch'});
       stage('business');
       options.validateResult?.(result);
       record.success = true;stage('complete');
@@ -96,6 +113,7 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       const safeError = options.signal?.aborted ? new AppError('stopped') : error instanceof AppError ? error : new AppError(error.name === 'TimeoutError' || error.name === 'AbortError' ? 'timeout' : 'network', 502);
       record.failureStage=safeError.diagnostic?.stage || record.stage || 'local';
       record.failureReason=safeError.diagnostic?.reason || safeError.category;
+      if(task==='story'&&['invalid_response','output_limit'].includes(safeError.category))try{failureEvidence.save(record,failureOutput,config.key);}catch{record.failureEvidenceUnavailable=true;}
       const field=safeError.diagnostic?.field;if(typeof field==='string' && /^(title|identity|intro|character|opening|scenes\.[0-3](?:\.(time|title|text))?)$/.test(field))record.failureField=field;
       if(scoped&&safeError.diagnostic?.evidence){const e=safeError.diagnostic.evidence;log(JSON.stringify({type:'scoped_temporal_evidence',requestId:record.requestId,caseId:options.diagnosticCaseId,field:record.failureField,reason:record.failureReason,chapterTime:redactEvidence(String(e.chapterTime||''),config.key).slice(0,120),bodyDate:e.bodyDate,scope:e.scope,rule:e.rule,clause:redactEvidence(String(e.clause||''),config.key).slice(0,240)}));}
       record.errorCategory = safeError.category; safeError.requestId = record.requestId; throw safeError;

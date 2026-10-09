@@ -1,3 +1,4 @@
+import {KEY_QUESTION_BY_ID} from './critical-background.js';
 import {withoutOptionalAnalysis} from './question-recovery.js';
 import {questionTitle} from './question-context.js';
 import React,{useEffect,useRef,useState} from 'react';
@@ -6,7 +7,7 @@ import {SCENARIO_BY_ID} from './scenario-bank.js';
 import {scenarioKey,readScenarioHistory,rememberScenario} from './scenario-context.js';
 import {supplementState,supplementKey,saveSupplement,answerText,unknownAnswer,finishSupplementPage} from './supplementary.js';
 import {experience} from './services';
-const QUESTION_BY_ID={...ORDINARY_BY_ID,...SCENARIO_BY_ID};
+const QUESTION_BY_ID={...ORDINARY_BY_ID,...KEY_QUESTION_BY_ID,...SCENARIO_BY_ID};
 const fresh=()=>({selected:[],text:'',skipped:false});
 const isUnknown=t=>/^(?:说不清|不确定|不愿透露|都不太符合|还没定|还没想好)/.test(t);
 const InkWait=({children})=> <span className="ink-wait"><span aria-hidden="true" className="ink-dots"><i/><i/><i/></span>{children||'还有些事想问问你…'}</span>;
@@ -20,7 +21,7 @@ export default function SupplementaryQuestions({background,onChange,onClose,onGe
  function applyPlan(result,analysisOnly=false){const s=current.current;let scenario=s.scenario;const picked=result.questions.find(q=>SCENARIO_BY_ID[q.id]);if(picked&&!scenario){scenario={id:picked.id,answer:'',skipped:false,scopeKey:supplementKey(base.current),analysis:null};rememberScenario(localStorage,picked.id,scenario.scopeKey);}
   if(scenario&&result.scenarioAnalysis)scenario={...scenario,analysis:result.scenarioAnalysis};
   const ids=analysisOnly?[]:result.questions.map(q=>q.id);const exists=ids.length&&s.pages.some(p=>JSON.stringify(p)===JSON.stringify(ids));
-  store({...s,scenario,uiReady:!result.conflict&&(analysisOnly||result.questions.length===0),plan:result,questionMeta:{...s.questionMeta,...Object.fromEntries(result.questions.map(q=>[q.id,q]))},shown:[...new Set([...s.shown,...ids])],pages:ids.length&&!exists?[...s.pages,ids]:s.pages,page:ids.length&&!exists?s.pages.length:Math.max(0,Math.min(s.page,s.pages.length-1))});
+  store({...s,scenario,criticalUnknowns:result.criticalUnknowns||s.criticalUnknowns||[],uiReady:!result.conflict&&(analysisOnly||result.questions.length===0),plan:result,questionMeta:{...s.questionMeta,...Object.fromEntries(result.questions.map(q=>[q.id,q]))},shown:[...new Set([...s.shown,...ids])],pages:ids.length&&!exists?[...s.pages,ids]:s.pages,page:ids.length&&!exists?s.pages.length:Math.max(0,Math.min(s.page,s.pages.length-1))});
  }
  async function plan(s,analysisOnly=false){if(pending.current||(generating.current&&!analysisOnly))return null;invalidate();generating.current=analysisOnly;const version=revision.current,c=new AbortController();request.current=c;setBusy(true);setError('');setProgress('还有些事想问问你…');const b=store(s);
   try{const task=experience.planQuestions(b,c.signal,t=>{if(version===revision.current)setProgress(t);});pending.current=task;const result=await task;if(version!==revision.current)return null;applyPlan(result,analysisOnly);if(result.optionalAnalysisUnavailable){store(withoutOptionalAnalysis(current.current));if(!analysisOnly)handoff(finish(true));}return {result,version};}
@@ -32,8 +33,8 @@ export default function SupplementaryQuestions({background,onChange,onClose,onGe
  useEffect(()=>{group.current?.scrollTo({top:0});},[state.page,state.pages.length]);
  const ids=(state.pages[state.page]||[]).filter(id=>!['G12','G14'].includes(id)&&QUESTION_BY_ID[id]),conflict=state.plan?.conflict;
  function finish(all=false){const s=finishSupplementPage(current.current,all?current.current.shown:ids),q=s.scenario;if(q&&(!q.answer.trim()||unknownAnswer(q.answer)))s.scenario={...q,skipped:true,analysis:null};return s;}
- async function generate(){if(generating.current||handedOff.current)return;generating.current=true;let s=finish(true);if(s.plan?.conflict){generating.current=false;return;}const task=pending.current,version=++revision.current;setBusy(true);store(s);
-  if(task){try{const result=await task;if(version!==revision.current)return;if(result.conflict){store({...current.current,plan:result});setBusy(false);generating.current=false;return;}if(s.scenario&&result.scenarioAnalysis)store({...current.current,scenario:{...s.scenario,analysis:result.scenarioAnalysis}});}catch{if(version!==revision.current)return;}}
+ async function generate(){if(generating.current||handedOff.current)return;generating.current=true;let s={...finish(true),skippedRemaining:!current.current.uiReady};if(s.plan?.conflict){generating.current=false;return;}const task=pending.current,version=++revision.current;setBusy(true);store(s);
+  if(task){try{const result=await task;if(version!==revision.current)return;if(result.conflict){store({...current.current,plan:result});setBusy(false);generating.current=false;return;}store({...current.current,criticalUnknowns:result.criticalUnknowns||current.current.criticalUnknowns||[],plan:{...result,questions:[],stop:true}});if(s.scenario&&result.scenarioAnalysis)store({...current.current,scenario:{...s.scenario,analysis:result.scenarioAnalysis}});}catch{if(version!==revision.current)return;}}
   if(version!==revision.current)return;pending.current=null;s=current.current;const q=s.scenario;
   if(q&&!q.skipped&&q.answer.trim()&&q.analysis?.key!==scenarioKey(q)&&!analysisFailed){generating.current=false;const out=await plan(s,true);if(!out||out.version!==revision.current)return;if(out.result.conflict)return;if(!current.current.scenario?.analysis)store(withoutOptionalAnalysis(current.current));}
   handoff(current.current);

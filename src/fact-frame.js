@@ -82,4 +82,4 @@ export function currentOpening(story,background){
  if(/现在|如今|此刻/.test(story.opening||'')&&!inspectFactText(story.opening,background).length&&!/今年暑假|今年夏天/.test(story.opening))return safeOpeningAddress(story.opening,background);
  return year?`我在这里。那条路已经走过来了，${year}年的事，可以慢慢说。`:'我在这里。那条路已经走过来了，你想从哪里聊起？';
 }
-export function sceneTimeLabel(time,background){if(scenePhase({time},background)==='future'&&!/未来设想/.test(time))return '未来设想 · '+time;if(/\d{4}年|同年|次年|翌年/.test(time))return time;return /年份未明确/.test(time)?time:`${time} · 年份未明确`;}
+export function sceneTimeLabel(time,background){if(/\d{4}年|同年|次年|翌年/.test(time))return time;return /年份未明确/.test(time)?time:`${time} · 年份未明确`;}

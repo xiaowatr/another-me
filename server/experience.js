@@ -1,7 +1,5 @@
+import {chooseStoryPool} from './story-pool.js';
 import {directBeijingReply} from './realtime-context.js';
-import {storyOutputIssues} from './story-output-checks.js';
-import {scenarioReviewMessages,validateScenarioReview} from './scenario-review.js';
-import {openingAddresseeConflict} from '../src/participant-identity.js';
 import {createPlannerTasks,planWithGapCheck,normalizePlan,PLANNER_VERSION} from './supplementary-planner.js';
 import {memoryMessages,normalizeMemoryResult} from './memory-extraction.js';
 import {storyClock} from '../src/story-clock.js';
@@ -9,16 +7,15 @@ import {publicQuestion} from '../src/public-question.js';
 import {currentOwner,createSlots} from './request-owner.js';
 import {activeStoryTrace,PROCESS_STARTED_AT} from './story-timing.js';
 import {rolePresentation,presentNewStory} from '../src/role-presentation.js';
-import {CODE_VERSION,diagnosticRange,takeDiagnosticCase} from './diagnostics.js';
-import {hardConflicts,applyClarification,temporalIssues} from '../src/input-anchors.js';
-import {reviewMessages,validateReview} from './setting-review.js';
-import {compileSetting,settingIssues} from '../src/effective-setting.js';
+import {CODE_VERSION,takeDiagnosticCase} from './diagnostics.js';
+import {hardConflicts,applyClarification} from '../src/input-anchors.js';
+import {compileSetting} from '../src/effective-setting.js';
 import {recallTarget,inputConflicts} from '../src/consistency.js';
 import {readableText,readableResult} from './readable-text.js';
-import {reviewStory,inspectFactText} from '../src/fact-frame.js';
+import {inspectFactText} from '../src/fact-frame.js';
 import {qualifyCurrentAge,historyRisk} from '../src/session-context.js';
 import {migrateBackground} from '../src/background.js';
-﻿import { checkStoryGrounding, checkChatGrounding } from './grounding.js';
+﻿import { checkChatGrounding } from './grounding.js';
 import { selectEra } from './era.js';
 import { coordinates } from '../src/context.js';
 import { randomUUID } from 'node:crypto';
@@ -89,8 +86,8 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       emit({type:'done',requestId:response.requestId});
       return {requestId:response.requestId};
     }),
-    status() { return {maxConcurrent:slots.limit,activeModelTasks:slots.active,storyThinking:config.storyThinking||'disabled',storyMaxCompletionTokens:6000, version:CODE_VERSION,commit:/^[a-f0-9]{40}$/.test(process.env.RENDER_GIT_COMMIT||'')?process.env.RENDER_GIT_COMMIT:null,promptVersion:PROMPT_VERSION,questionPlannerVersion:PLANNER_VERSION,semanticReviewEnabled:Boolean(config.reviewStories),processStartedAt:PROCESS_STARTED_AT, mode: config.mode, site: config.site, model: config.model,  }; },
-    story: (input,{signal,onSetting,rewriteFeedback}={}) => exclusive('story', async () => {
+    status() { return {maxConcurrent:slots.limit,activeModelTasks:slots.active,storyThinking:config.storyThinking||'disabled',storyMaxCompletionTokens:6000, version:CODE_VERSION,commit:/^[a-f0-9]{40}$/.test(process.env.RENDER_GIT_COMMIT||'')?process.env.RENDER_GIT_COMMIT:null,promptVersion:PROMPT_VERSION,questionPlannerVersion:PLANNER_VERSION,storySelectionEnabled:false,processStartedAt:PROCESS_STARTED_AT, mode: config.mode, site: config.site, model: config.model,  }; },
+    story: (input,{signal,onSetting,onDraft,poolState}={}) => exclusive('story', async () => {
       const diagnosticCaseId=takeDiagnosticCase(input.background||{});
       let background = validateBackground(migrateBackground(applyClarification(input.background)),{newSubmission:true});
       if(diagnosticCaseId)background={...background,details:background.details.replace('[诊断:'+diagnosticCaseId+']','').trim()};
@@ -101,9 +98,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       const effective=compileSetting(background);effective.originalInput={...input.background};if(effective.clarifications.length){if(input.clarificationSkipped)throw new AppError('input_conflict',422);return {kind:'clarification',question:effective.clarifications.join('；'),mode:config.mode};}
       onSetting?.(effective);
       activeStoryTrace()?.mark('input_compiled');
-      const response = config.mode === 'demo' ? { result: { ...demoStory, kind: 'story', character: demoStory.intro, opening: '【固定演示开场】刚刚关了书店，你想聊些什么？' } } : await caller.call('story', storyMessages(background, input.clarification || '', !input.clarificationSkipped,effective,rewriteFeedback),{signal,diagnosticCaseId,diagnosticRange:diagnosticRange(effective.temporal),diagnosticClock:{asOf:effective.temporal.asOf,startYear:effective.temporal.start?.year??null,startMonth:effective.temporal.start?.month??null},validateResult:result=>{if(result.kind==='clarification' && (background.followupKey || input.clarificationSkipped || input.clarification))throw new AppError('invalid_response',502,{stage:'business',reason:'repeated_clarification'});if(result.kind==='story'){const outputIssue=storyOutputIssues(result,background)[0];if(outputIssue)throw new AppError('background_conflict',422,{stage:'business',...outputIssue});if(openingAddresseeConflict(result.opening,background))throw new AppError('background_conflict',422,{stage:'business',reason:'opening_addressee_conflict',field:'opening'});const conflicts=settingIssues(result,effective);if(conflicts.length)throw new AppError('background_conflict',422,{stage:'business',reason:conflicts[0].reason,field:conflicts[0].field});checkStoryGrounding(result,background,effective.temporal);const review=reviewStory(result,background,[],{strictTime:true});if(review.issues.length)throw new AppError('background_conflict',422,{stage:'business',reason:review.issues[0].reasons[0],field:review.issues[0].field});}}});
-      if(config.mode==='real'&&response.result.kind==='story'){const check=scenarioReviewMessages(background,response.result);if(check)await caller.call('review',check,{reviewStage:'scenario',signal,parentRequestId:response.requestId,validateResult:r=>validateScenarioReview(r,response.result)});}
-      if(config.mode==='real'&&config.reviewStories&&response.result.kind==='story'){await caller.call('review',reviewMessages(effective,response.result),{reviewStage:'setting',signal,parentRequestId:response.requestId,validateResult:r=>validateReview(r,effective,response.result)});}
+      const response=config.mode==='demo'?{result:{...demoStory,kind:'story',character:demoStory.intro,opening:'【固定演示开场】刚刚关了书店，你想聊些什么？'}}:await chooseStoryPool({caller,messages:storyMessages(background,input.clarification||'',!input.clarificationSkipped,effective),background,effectiveSetting:effective,signal,onDraft,state:poolState});
       activeStoryTrace()?.mark('model_parse_validation_completed');
       response.result=readableResult(response.result);if(response.result.kind==='story')response.result=presentNewStory(response.result,background);
       if(response.result.kind==='story')response.result.openingVersion=2;

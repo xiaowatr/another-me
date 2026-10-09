@@ -1,3 +1,4 @@
+import {generationInput} from '../server/generation-input.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {storyMessages,chatMessages,streamingChatMessages} from '../server/prompts.js';
@@ -7,10 +8,10 @@ import {demoStory} from '../src/services/demo.js';
 const inputs=[{birthYear:'2000',forkAge:'25',realityOutcome:'2025年9月我停了陶艺练习。',hypotheticalDirection:'如果继续练陶艺，只看9月和10月。'},{birthYear:'2000',forkAge:'25',realityOutcome:'2025年9月我继续每天到办公室工作。',hypotheticalDirection:'如果改为每周两天远程工作，只看9月和10月。'}];
 test('two story requests carry reference excerpts and raw expression clues without changing effective setting',()=>{
  for(const background of inputs){const messages=storyMessages(background),data=JSON.parse(messages[1].content);
-  assert.ok(messages[0].content.includes(EXPRESSION_RULES));assert.ok(messages[0].content.includes(STORY_EXPRESSION));
-  assert.deepEqual(data.effectiveSetting,generationSetting(compileSetting(background)));
+  assert.ok(messages[0].content.includes('句子有长有短'));for(const rule of ['不规定比例、冲突数量或成长路线','用空行分隔','复读物件、章节名或同一种情绪必须有新的情节作用'])assert.ok(messages[0].content.includes(rule));
+  assert.deepEqual(data.effectiveSetting,generationInput(compileSetting(background)));
   assert.deepEqual(data.writingReference.examples.map(e=>e.id),['S01','S02']);
-  assert.ok(data.userExpressionSamples.initial.includes(background.realityOutcome));
+  assert.ok(data.effectiveSetting.sources.some(s=>s.id==='realityOutcome'&&s.text===background.realityOutcome));
   assert.ok(data.writingReference.examples.every(e=>e.text.length<250));
  }
 });

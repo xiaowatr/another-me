@@ -1,7 +1,7 @@
 import {planWhenReady} from './question-admission.js';
 import {anonymousToken} from './anonymous.js';
 import {createStoryClient} from './story-task-client.js';
-import {storyWithRetry} from './story-retry.js';
+
 ﻿async function request(path, body, signal, trace) {
   const started=performance.now();let timing=trace?{clientTraceId:trace,requestId:trace,startedAt:new Date().toISOString()}:null;
   const combinedSignal=signal?AbortSignal.any([signal,AbortSignal.timeout(100000)]):AbortSignal.timeout(100000);
@@ -25,7 +25,7 @@ export const experience = {
   ackStory:id=>storyClient.ack(id),
   restore: (snapshot,previousSessionId,signal) => request('/api/session/restore',{snapshot,previousSessionId},signal),
   status: () => request('/api/status'),
-  getStory: (input,signal,trace,onRetry,onSetting,onRecover) => storyWithRetry(attempt=>storyClient.get(input,signal,attempt?crypto.randomUUID():trace,onSetting,onRecover),{signal,onRetry,onFailedAttempt:e=>reportStoryTiming(e.timing,'failed')}),
+  getStory: (input,signal,trace,onRetry,onSetting,onRecover) => storyClient.get(input,signal,trace,onSetting,onRecover),
   reply: (input) => request('/api/chat', input),
 };
 

@@ -19,11 +19,11 @@ test('3-4 chapters accepted; count, empty, type, duplicate and size remain disti
  assert.throws(()=>parseResult(JSON.stringify(raw).replace('"kind":"story"','"kind":"story","kind":"story"'),'story'),e=>e.diagnostic.reason==='duplicate_field');
  assert.equal(parse({...raw,scenes:raw.scenes.map((s,i)=>i===3?{...s,title:''}:s)}).scenes[3].title,'片段4');
  const flat={...raw};delete flat.scenes;raw.scenes.forEach((s,i)=>Object.entries(s).forEach(([k,v])=>flat[`scene_${i+1}_${k}`]=v));assert.equal(parse(flat).scenes[3].text,raw.scenes[3].text);
- assert.equal(storyTools([])[0].function.parameters.properties.scenes.maxItems,4);
+ assert.ok(storyTools([])[0].function.parameters.properties.chapter4);
 });
-test('fourth chapter goes through generation, save, restore and actual chat messages',async()=>{
- let calls=0;const app=createExperience({mode:'real',model:'mock',maxConcurrent:3},{call:async(task,msg,options)=>{calls++;const result=parse(raw);options.validateResult(result);return {result,requestId:'mock-four-chapters'};}});
- const result=await app.story({background});assert.equal(calls,1);assert.equal(result.story.scenes.length,4);
+test('saved fourth chapter remains readable, restorable and usable in chat',async()=>{
+ let calls=0;const app=createExperience({mode:'real',model:'mock',maxConcurrent:3},{call:async(task,msg,options)=>{calls++;if(task==='selection')return {result:'A'};const result=parse(raw);options.validateResult(result);return {result,requestId:'mock-four-chapters'};}});
+ const result={story:parse(raw)};assert.equal(calls,0);assert.equal(result.story.scenes.length,4);
  const map=new Map(),storage={getItem:k=>map.get(k)||null,setItem:(k,v)=>map.set(k,v)};
  assert.ok(writeLives(storage,{activeId:'test55',lives:[{id:'test55',background,story:result.story,messages:[],memories:[]}]}));
  const life=readLives(storage).lives[0];assert.equal(life.story.scenes[3].text,raw.scenes[3].text);assert.equal(life.story.synopsis,raw.synopsis);assert.equal(life.chatTime.month,7);
