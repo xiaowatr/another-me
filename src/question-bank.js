@@ -47,14 +47,14 @@ export const QUESTION_BANK=[
     "question": "这次有什么想保留，或者不希望被改写的？",
     "kind": "text",
     "options": [],
-    "group": "boundaries",
+    "group": "story-boundaries",
     "when": "保留内容/边界未知且可能影响故事；复用已有“希望故事遵守”答案",
     "skip": "原文或原表单已有足够边界，或其他题已覆盖同一内容",
-    "purpose": "区分保留愿望与明确硬约束，不自动将“希望”升级为“必须”；合并原G07/G07，不另设同义题"
+    "purpose": "区分保留愿望与明确硬约束，不自动将“希望”升级为“必须”；不另设同义题"
   },
   {
     "id": "G08",
-    "question": "哪个小习惯，最好也留在另一个你身上？",
+    "question": "那时，你实际有哪些小习惯？",
     "kind": "multi",
     "options": [
       "做决定前列清单",
@@ -67,7 +67,7 @@ export const QUESTION_BANK=[
     "group": "G08",
     "when": "缺乏可用个人行为，且能进入本次情节",
     "skip": "已有相关习惯、具体行为原句；仅有MBTI不算已知",
-    "purpose": "写入shared.habits；通过具体动作呈现，如看房前做表、试做小样，不写成抽象人格介绍"
+    "purpose": "写入real.habits；仅记录实际习惯，不代表希望平行角色保留；通过具体动作呈现，如看房前做表、试做小样，不写成抽象人格介绍"
   },
   {
     "id": "G09",
@@ -158,7 +158,7 @@ export const QUESTION_BANK=[
     ],
     "group": "S01",
     "when": "换专业、选学校、交换学习",
-    "skip": "已说明熟悉程度或具体学习经验",
+    "skip": "已明确说明熟悉程度；仅写一段学习经历不自动证明水平已知",
     "purpose": "写入real.familiarity.study；决定平行线初期探索成本，不能把只是好奇写成多年热爱"
   },
   {
@@ -325,9 +325,9 @@ export const QUESTION_BANK=[
       "原来的工作或学习节奏",
       "没什么特别舍不得的"
     ],
-    "group": "boundaries",
+    "group": "departure-attachment",
     "when": "迁移，离开牵挂未知且用户愿意探索",
-    "skip": "G07已覆盖；原文已说最舍不得的人或物；不默认必须有损失",
+    "skip": "只有已回答离开时牵挂的具体内容才覆盖；原文已说最舍不得的人或物；不默认必须有损失",
     "purpose": "写入real.attachment；安排联系、怀念或回访意愿，不强迫角色后悔，也不把“舍不得”变成最终没走"
   },
   {
@@ -402,9 +402,9 @@ export const QUESTION_BANK=[
       "不拿自己的隐私换理解",
       "没有特别限定"
     ],
-    "group": "boundaries",
+    "group": "relationship-boundaries",
     "when": "关系边界对本次探索重要",
-    "skip": "原文或G07已明确边界；不要要求每个关系故事都选",
+    "skip": "原文或G07明确回答了关系行为边界（仅其他故事约束不算覆盖）；不要要求每个关系故事都选",
     "purpose": "写入parallel.requested_boundaries；约束角色的主动行为，不能用它宣称第三方一定不会越界；不保证关系圆满"
   },
   {
@@ -419,7 +419,7 @@ export const QUESTION_BANK=[
     ],
     "group": "I01",
     "when": "学兴趣、社团、运动、生活技能",
-    "skip": "已明确零基础/练了几年/熟悉程度",
+    "skip": "已明确零基础或经验水平，或原话能直接回答本题；仅讲一段经历不自动认为熟悉程度已知",
     "purpose": "写入real.experience_level；控制学习曲线和能力起点，不把新手一上来写成高手"
   },
   {
@@ -471,4 +471,7 @@ export const QUESTION_BANK=[
   }
 ];
 QUESTION_BANK.push(...[{"id":"G15","question":"那时空下来，你更想？","options":["自己待着","找熟人聊聊","出去逛逛","做点喜欢的事","看当天心情"],"group":"rest","when":"与这次故事有关且休息偏好未知","kind":"multi","skip":"任何原文已说明同类考虑则不再问；不把基础生活状态空白转为追问","purpose":"结合当时条件参考具体行动，不推断固定人格，不预设结果"},{"id":"G16","question":"那时到了陌生环境，你一般先？","options":["看看再说","找个人问问","自己试试","提前做功课"],"group":"unfamiliar","when":"本次涉及新环境且具体反应未知","kind":"multi","skip":"任何原文已说明同类考虑则不再问；不把基础生活状态空白转为追问","purpose":"结合当时条件参考具体行动，不推断固定人格，不预设结果"},{"id":"G17","question":"那时遇到不顺，你通常会？","options":["先自己琢磨","找人聊聊","暂时放一放","换个办法试试"],"group":"coping","when":"本次有学习或适应困难且应对方式未知","kind":"multi","skip":"任何原文已说明同类考虑则不再问；不把基础生活状态空白转为追问","purpose":"结合当时条件参考具体行动，不推断固定人格，不预设结果"},{"id":"G18","question":"那时喜欢上一件事，你更常？","options":["固定留时间","有空就做","集中投入一阵","找人一起"],"group":"interest-investment","when":"本次涉及兴趣或学习且投入方式未知","kind":"multi","skip":"任何原文已说明同类考虑则不再问；不把基础生活状态空白转为追问","purpose":"结合当时条件参考具体行动，不推断固定人格，不预设结果"}]);
+QUESTION_BANK.push(...[{"id": "G19", "question": "那段时间，空下来你最常做的一件小事是什么？", "kind": "text", "options": [], "group": "personal-routine", "personalDetail": true, "when": "日常活动能与本次主题相关的动作衔接", "skip": "已有同类具体信息或跳过该维度就不问；G15与G19只在实际缺口不同且有新价值时另问，不为新鲜感重问", "purpose": "记录现实用户当时的具体回忆（未来设想参考现实现在）；保留原话，可用于相关动作、场景或表达，不推断未给前史、稳定人格或创作愿望"}, {"id": "G20", "question": "有没有一个你常去的地方？通常去那里做什么？", "kind": "text", "options": [], "group": "personal-place", "personalDetail": true, "when": "本次涉及日常空间或活动，且常去地点与行为未知", "skip": "已有同类具体信息或跳过该维度就不问；不为新鲜感重问", "purpose": "记录现实用户当时的具体回忆（未来设想参考现实现在）；保留原话，可用于相关动作、场景或表达，不推断未给前史、稳定人格或创作愿望"}, {"id": "G21", "question": "那时你和谁最常聊天？一般聊些什么？", "kind": "text", "options": [], "group": "personal-conversation", "personalDetail": true, "when": "本次涉及交流或关系，且对象和话题尚未说明", "skip": "已有同类具体信息或跳过该维度就不问；不为新鲜感重问", "purpose": "记录现实用户当时的具体回忆（未来设想参考现实现在）；保留原话，可用于相关动作、场景或表达，不推断未给前史、稳定人格或创作愿望"}, {"id": "G22", "question": "讲一件小事，让我们认识一下当时的你。好笑的、别扭的、普通的都可以。", "kind": "text", "options": [], "group": "personal-anecdote", "personalDetail": true, "when": "缺少能体现本人具体行为的小事，且与本次故事相关", "skip": "已有同类具体信息或跳过该维度就不问；不为新鲜感重问", "purpose": "记录现实用户当时的具体回忆（未来设想参考现实现在）；保留原话，可用于相关动作、场景或表达，不推断未给前史、稳定人格或创作愿望"}, {"id": "G23", "question": "那时候，你常说的一句话是什么？", "kind": "text", "options": [], "group": "personal-expression", "personalDetail": true, "when": "本人表达方式未知，且可自然用于本次相关对话", "skip": "已有同类具体信息或跳过该维度就不问；不为新鲜感重问", "purpose": "记录现实用户当时的具体回忆（未来设想参考现实现在）；保留原话，可用于相关动作、场景或表达，不推断未给前史、稳定人格或创作愿望"}]);
+for(const q of QUESTION_BANK)q.answerKind=q.id==='G08'||q.personalDetail?'real_behavior':['G04','G07','S02','W01','W03','M01','M02','R01','R04','R05','I02'].includes(q.id)?'creative_preference':'user_answer';
+for(const q of QUESTION_BANK)if(q.kind==='multi')q.maxSelections=['W02','W01','G06'].includes(q.id)?2:Math.min(4,q.options.length);
 export const QUESTION_BY_ID=Object.fromEntries(QUESTION_BANK.map(q=>[q.id,q]));

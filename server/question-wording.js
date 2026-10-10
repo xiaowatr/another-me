@@ -5,7 +5,8 @@ export function modelQuestionBank(){return QUESTION_BANK.filter(q=>!['G12','G14'
 export function resolveQuestionWording(question,meta,background){
  const keys=['questionText','question'].filter(k=>meta[k]!=null);
  const texts=keys.map(k=>typeof meta[k]==='string'?meta[k].trim():'');
- const invalid=texts.some(t=>!t||t.length>180),conflict=!invalid&&texts.length===2&&texts[0]!==texts[1];
+ const polluted=texts.some(t=>/:(?:contentReference|cite)\[|\[oaicite:|```|<\/?[a-z][^>]*>|[\u0000-\u0008\u000b\u000c\u000e-\u001f]/i.test(t));
+ const invalid=polluted||texts.some(t=>!t||t.length>180),conflict=!invalid&&texts.length===2&&texts[0]!==texts[1];
  const usable=texts.length>0&&!invalid&&!conflict;
- return {questionText:questionTitle(question,usable?{questionText:texts[0]}:null,background),wordingSource:usable?keys[0]:'bank',wordingFallback:usable?null:conflict?'conflict':invalid?'invalid':'missing'};
+ return {questionText:questionTitle(question,usable?{questionText:texts[0]}:null,background),wordingSource:usable?keys[0]:'bank',wordingFallback:usable?null:conflict?'conflict':polluted?'format_pollution':invalid?'invalid':'missing'};
 }

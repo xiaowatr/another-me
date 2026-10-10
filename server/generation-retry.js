@@ -1,3 +1,4 @@
+import {updateStoryRequestInput} from './story-request.js';
 import {storyTools} from './story-tools.js';
 import {RETRY_RULE} from './generation-rules.js';
 // Only schema diagnostics with an identified field, or an existing direct count proof.
@@ -22,6 +23,5 @@ export function hardRetryFeedback(issues,c){
 }
 export function withRetryFeedback(messages,feedback){
  if(!feedback)return messages;
- const copy=messages.map(m=>({...m})),last=copy.at(-1),input=JSON.parse(last.content);
- last.content=JSON.stringify({...input,retryFeedback:feedback});return copy;
+ return updateStoryRequestInput(messages,input=>({...input,retryFeedback:feedback}));
 }

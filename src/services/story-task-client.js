@@ -1,13 +1,14 @@
+import {appStorage} from '../app-storage.js';
 import {STORY_MAX_MODEL_CALLS,storyCallCount} from '../story-budget.js';
 const OP='another-me.story-operation.v1';
-export function resetStoryOperation(){try{localStorage.removeItem(OP);}catch{}}
-const operation=()=>{try{return JSON.parse(localStorage.getItem(OP)||'null');}catch{return null;}};
-const remember=value=>localStorage.setItem(OP,JSON.stringify(value));
+export function resetStoryOperation(){try{appStorage().removeItem(OP);}catch{}}
+const operation=()=>{try{return JSON.parse(appStorage().getItem(OP)||'null');}catch{return null;}};
+const remember=value=>appStorage().setItem(OP,JSON.stringify(value));
 const signature=input=>JSON.stringify(Object.fromEntries(Object.entries(input.background||{}).filter(([k])=>!k.startsWith('followup'))));
 const KEY='another-me.pending-story.v1';
-export function pendingStory(){try{return JSON.parse(localStorage.getItem(KEY)||'null');}catch{return null;}}
-export function clearPendingStory(id){try{if(pendingStory()?.taskId===id)localStorage.removeItem(KEY);}catch{}}
-const save=value=>{try{localStorage.setItem(KEY,JSON.stringify(value));}catch{throw new Error('暂时无法保存草稿与恢复信息，尚未提交生成。请先备份文字。');}};
+export function pendingStory(){try{return JSON.parse(appStorage().getItem(KEY)||'null');}catch{return null;}}
+export function clearPendingStory(id){try{if(pendingStory()?.taskId===id)appStorage().removeItem(KEY);}catch{}}
+const save=value=>{try{appStorage().setItem(KEY,JSON.stringify(value));}catch{throw new Error('暂时无法保存草稿与恢复信息，尚未提交生成。请先备份文字。');}};
 const wait=signal=>new Promise((resolve,reject)=>{const done=()=>{clearTimeout(timer);signal?.removeEventListener('abort',abort);resolve();},abort=()=>{clearTimeout(timer);signal?.removeEventListener('abort',abort);reject(signal.reason);};const timer=setTimeout(done,1500);if(signal?.aborted)abort();else signal?.addEventListener('abort',abort,{once:true});});
 export function createStoryClient(request,{pause=wait}={}){return {
  async get(input,signal,trace,onSetting,onRecover=()=>{}){

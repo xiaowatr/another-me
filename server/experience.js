@@ -1,3 +1,4 @@
+import {normalizeChatMemory} from './chat-memory.js';
 import {chooseStoryPool} from './story-pool.js';
 import {directBeijingReply} from './realtime-context.js';
 import {createPlannerTasks,planWithGapCheck,normalizePlan,PLANNER_VERSION} from './supplementary-planner.js';
@@ -73,6 +74,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       if(!message || message.length>2000 || !['chat','reality','fiction'].includes(intent))throw new AppError('input');
       if(s.corrections.length>=20)throw new AppError('memory_full');
       const controller=new AbortController();
+      if(input.messageId!=null&&(typeof input.messageId!=='string'||!input.messageId||input.messageId.length>180))throw new AppError('input');
       const p={id:randomUUID(),text:'',seen:'',message,history:[...s.history],controller};s.pending=p;
       // Unconfirmed chat corrections remain in recent conversation; only UI-confirmed memories are pinned.
       emit({type:'start',turnId:p.id,corrections:s.corrections});
@@ -80,9 +82,10 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       const forward=text=>{text=qualifyCurrentAge(rolePresentation(readableText(text),s.background),s.background,s.story);const risks=inspectFactText(text,s.background,{memories:s.memories,anchorYear:storyClock(s.background,s.story).year});if(risks.length)throw new AppError('background_conflict',422,{stage:'business',reason:risks[0]});checkChatGrounding(text,s.background,s.memories || [],JSON.stringify({story:s.story,roleRecords:s.roleRecords,fiction:s.memories.filter(m=>m.type==='fiction')}),recallTarget(message));p.text+=text;emit({type:'text',text});};
       const onText=text=>{buffered+=text;let match;while((match=/[。！？!?\n]/.exec(buffered))){const end=match.index+1;const sentence=buffered.slice(0,end);buffered=buffered.slice(end);forward(sentence);}};
       const clockReply=intent==='chat'?directBeijingReply(message):null;
-      const response=clockReply?{result:{reply:clockReply}}:config.mode==='demo'?{result:{reply:await demoProvider.reply({turn:s.history.length/2})}}:await caller.call('chat',streamingChatMessages(s,message,intent),{onText,validateResult:()=>{if(buffered){forward(buffered);buffered='';}},onStart:requestId=>emit({type:'request',requestId}),signal:AbortSignal.any([signal,controller.signal])});
+      const response=clockReply?{result:{reply:clockReply}}:config.mode==='demo'?{result:{reply:await demoProvider.reply({turn:s.history.length/2})}}:await caller.call('chat',streamingChatMessages(s,message,intent,new Date(),input.messageId||p.id),{onText,chatEnvelope:true,validateResult:()=>{if(buffered){forward(buffered);buffered='';}},onStart:requestId=>emit({type:'request',requestId}),signal:AbortSignal.any([signal,controller.signal])});
       if(clockReply||config.mode==='demo')onText(response.result.reply);
       if(buffered)forward(buffered);
+      emit({type:'memory',...normalizeChatMemory(response.result,s,message,input.messageId||p.id,p.id)});
       emit({type:'done',requestId:response.requestId});
       return {requestId:response.requestId};
     }),

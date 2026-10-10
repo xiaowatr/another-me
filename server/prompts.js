@@ -1,3 +1,5 @@
+import {CHAT_MEMORY_RULE} from './chat-memory.js';
+import {orderedStoryMessages} from './story-request.js';
 import {generationInput} from './generation-input.js';
 import {GENERATION_SECTIONS,sectionText} from './generation-rules.js';
 import {STORY_OUTPUT_RULE} from './story-output-checks.js';
@@ -15,9 +17,9 @@ import {lifeContext,safeHistory,chatClock} from '../src/session-context.js';
 ﻿import { coordinates } from '../src/context.js';
 import { selectEra } from './era.js';
 import {timelineInput} from '../src/story-input.js';
-export const PROMPT_VERSION='2026-10-09.v70';
-export const CORE=GENERATION_SECTIONS.slice(0,4).map(sectionText).join('\n\n');
-export const STORY=GENERATION_SECTIONS.slice(4).map(sectionText).join('\n\n');
+export const PROMPT_VERSION='2026-10-11.v82';
+export const CORE=GENERATION_SECTIONS.slice(0,2).map(sectionText).join('\n\n');
+export const STORY=GENERATION_SECTIONS.slice(2).map(sectionText).join('\n\n');
 const CHAT_RULE=`聊天专用可选字段：提供timeline时，atFork用于明确前情，imagined用于假设，realityLater仅属于现实后续；提供criticalFacts时其中明确事件优先。confirmedMemories提供时区分现实、偏好和虚构，不混用或恢复已删除信息。styleHint.mbti提供时才参考，空值忽略旧类型。这些字段缺失时不假装已经收到。\n${PARTICIPANT_RULES}\n以另一个自己身份，用第一人称回应上一句话；lifeContext.identityMap区分现实用户、平行角色和第三人；回复中的“你”默认指现实用户，故事中的朋友或同事使用姓名或关系称谓，不将角色与第三人的交往说成与你共同经历。只有话题需要时才对比两条人生，说明归属且不比较输赢、不以角色的顺利衬托用户的遗憾；effectiveSetting.roleGender为空时，不用男孩、女孩、小伙子、姑娘等确定自身性别，不限制其他人物称谓；不把内部未知值说成“性别未知/未填写/不详”，也不解释性别是否重要。styleProfile仅作表达线索，按其中优先级调整，不能覆盖事实与两条人生边界，不说“因为我是某类型”。lifeContext为每轮固定事实层：sharedBeforeFork是已知共同前情；realUser只属于现实用户；parallelCharacter记录另一条人生，chosenDirection是设想方向而不证明已经发生；亲历以storyFacts中已发生的事实为准，storyFacts里的细节和原话可回忆，不改成“如果我当时做了”。用户说“我没去／没答应”是在讲用户经历，不覆盖你的经历。
 chatTime只表示故事内角色交流的年份和大约年龄，不是现实用户的当前北京时间，未提供生日，年龄必须说“大约”，不能当成精确周岁。fork只标记分岔时点；出生年份或年龄未知时省略精确年龄，不补造。交流从故事结束时开始，以chatTime为准，不使用现实系统年份覆盖；故事结束之后尚未发生的经历只能作为计划或假设，不能声称已经经历，不把分岔年龄当当前年龄，不为填补年份擅自添加重大变故，也不能声称听说、记得用户未提供的现实近况或发展。原故事已有承诺或话语保留，但承诺不等于兑现。conversationAnchor.finalScene是开聊时刚结束的片段，不是已经过去几天或几周；其中当天完成的事可以说今天或刚刚完成，不能说昨天或上周完成。finalScene最后已经完成的行动和位置也是交流起点，先前离开或结束的状态不能在开场重置；过去的场景仅可明确回忆，不编造重返来圆场。多聊几轮不代表日期推进。描述故事事件时，今天、昨天、上周等相对时间须对照固定故事交流日期计算；用户问现实现在几点则只用本次realWorldNow；日期精度不足就不用具体间隔。userTimeCorrections是用户明确指定的交流时点，优先于旧回复和故事原时钟，持续沿用到下一次明确变更；纠正不因同条消息附带问题而失效，不更改现实用户与角色的经历归属。
 用户问“你记得我学了什么吗”时，“我”是现实用户；只从realUser、已确认用户记忆及用户自己说过的话查找，无依据就自然说还不知道，绝不拿角色经历冒充。职业地点和多年工作履历不是可以随口补的生活小事，须有已建立经历支撑；未知时坦诚说明，仍可创作不冲突的日常细节。角色记录roleRecords仅属于平行角色，statement为角色已明确讲述的经历，plan为计划，uncertain为未确定信息；不能混入现实用户记忆。尊重既有经历，不冲突的学校、朋友、习惯等细节可以合理创作；被问具体学校或姓名且符合经历时给具体细节，不用“普通学校、普通工作”笼统替代。直接以角色身份回答，不用“故事没写”“前面没提过”回避，也不必每个问题都编确定答案。从出生开始不同的设定允许成长路径不同，不强制复制现实学校、职业和关系，不套性别刻板印象。历史对话是交流记录；与本轮固定事实冲突的旧助手回复不继续引用。eventOrderCorrections纠正的是所指事件发生时的先后关系，不等于用户当前身份或另起交流日期；复述该事件时不能又把当时尚未发生的事当作已经发生的回忆。最新现实纠正只改realUser，只有明确要求修改虚构设定才改角色。
@@ -40,9 +42,10 @@ function context(background,story){
  eraContext:selectEra(background,c),currentDate:chatClock(background,undefined,story).asOf};
 }
 export function storyMessages(background,clarification='',allowClarification=true,compiled=compileSetting(background),now=new Date()){
- return [{role:'system',content:CORE+'\n\n'+STORY},{role:'user',content:JSON.stringify({identityMap:participantIdentity(),effectiveSetting:generationInput(compiled),writingReference:writingReference('story'),canClarify:allowClarification&&!background.followupKey&&!background.followupSkipped&&!clarification})}];
+ const ref=writingReference('story');
+ return orderedStoryMessages({generationStage:'body',effectiveSetting:generationInput(compiled),writingReference:{version:ref.version,examples:ref.examples.map(({id,approval,learn,text})=>({id,approval,learn:learn.split('；')[0],text}))},canClarify:allowClarification&&!background.followupKey&&!background.followupSkipped&&!clarification});
 }
-export function chatMessages(session,message,intent,now=new Date()){
+export function chatMessages(session,message,intent,now=new Date(),sourceId=null){
  session={...session,corrections:[...(session.corrections||[]),...explicitCorrections([{role:'user',text:message}])]};
  const recall=recallTarget(message),ctx=lifeContext(session.background,session.story,session.memories),evidence=JSON.stringify({story:session.story,fiction:(session.memories||[]).filter(m=>m.type==='fiction')});
  const isCorrection=text=>isIdentityCorrection(text)||Boolean(chatTimeCorrection(text)||eventOrderCorrection(text))||/(?:说错|纠正|更正)/.test(text||'');const currentCorrection=isCorrection(message);const lastCorrection=currentCorrection?(session.history||[]).length:(session.history||[]).findLastIndex(m=>m.role==='user'&&isCorrection(m.content));const scopedHistory=(session.history||[]).filter((m,i)=>m.role==='user'||i>lastCorrection);
@@ -57,8 +60,8 @@ export function chatMessages(session,message,intent,now=new Date()){
  payload.writingReference=writingReference('chat',message);
  payload.userExpressionSamples=userExpressionSamples(session.background,history,message);
  payload.styleProfile=chatStyle(session.background,recall?{preferences:ctx.preferences}:ctx,message,history);
- return [{role:'system',content:CHAT},{role:'user',content:JSON.stringify(payload)},...(recall?history.filter(m=>m.role==='user'):history),{role:'user',content:JSON.stringify({intent,message,responseFocus:{latestUserMessage:message,rule:'本轮只回应这条最新消息；历史仅用于解析省略、指代和已知事实，不重答上一轮问题，不先复述旧回复。先回答问句所问的事，再按需要补细节；若用户表达难受，先接住当下感受。无法确定指代时简短确认，不转向熟悉的旧情节。'},referent:recall,...(recall?{answerScope:'只回忆以上用户信息，简短回应；没有资料就说还不知道，不编造曾经聊过的细节、转行动机或想法。'}:{})})}];
+ return [{role:'system',content:CHAT},{role:'user',content:JSON.stringify(payload)},...(recall?history.filter(m=>m.role==='user'):history),{role:'user',content:JSON.stringify({intent,message,...(sourceId?{latestUserSourceId:sourceId}:{}),responseFocus:{latestUserMessage:message,rule:'本轮只回应这条最新消息；历史仅用于解析省略、指代和已知事实，不重答上一轮问题，不先复述旧回复。先回答问句所问的事，再按需要补细节；若用户表达难受，先接住当下感受。无法确定指代时简短确认，不转向熟悉的旧情节。'},referent:recall,...(recall?{answerScope:'只回忆以上用户信息，简短回应；没有资料就说还不知道，不编造曾经聊过的细节、转行动机或想法。'}:{})})}];
 }
-export function streamingChatMessages(session,message,intent,now=new Date()){
- const messages=chatMessages(session,message,intent,now);messages[0]={role:'system',content:`${CHAT_BASE}\n${REALTIME_RULE}\n${CHAT_RULE}\n${CHAT_EXPRESSION}\n只输出角色正文，不输出JSON、思考或格式说明。`};return messages;
+export function streamingChatMessages(session,message,intent,now=new Date(),sourceId=null){
+ const messages=chatMessages(session,message,intent,now,sourceId);messages[0]={role:'system',content:`${CHAT_BASE}\n${REALTIME_RULE}\n${CHAT_RULE}\n${CHAT_EXPRESSION}\n${CHAT_MEMORY_RULE}`};return messages;
 }

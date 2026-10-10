@@ -441,4 +441,5 @@ export const SCENARIO_BANK=[
     "perspective": "self"
   }
 ];
+SCENARIO_BANK.push(...[{"id": "Q61", "question": "假设你在一个新街区有半天空闲，没有必须完成的事。你会先去哪里、做点什么？", "kind": "text", "options": [], "scenario": true, "group": "daily-exploration", "when": "迁居／旅行／日常探索", "purpose": "仅参考回答中有原话依据的行动和表达；不是现实亲历，也不推稳定人格。", "perspective": "self"}, {"id": "Q62", "question": "假设你开始学一件感兴趣的事，材料已经摆在面前，也没有人催你。你会先试哪一步？", "kind": "text", "options": [], "scenario": true, "group": "gentle-learning", "when": "兴趣／学习／探索", "purpose": "仅参考回答中有原话依据的行动和表达；不是现实亲历，也不推稳定人格。", "perspective": "self"}, {"id": "Q63", "question": "假设你和一个聊得来的人散步，刚好看到一件让你觉得有意思的小事。你会怎样跟对方聊起来？", "kind": "text", "options": [], "scenario": true, "group": "everyday-expression", "when": "日常／关系／表达", "purpose": "仅参考回答中有原话依据的行动和表达；不是现实亲历，也不推稳定人格。", "perspective": "self"}]);
 export const SCENARIO_BY_ID=Object.fromEntries(SCENARIO_BANK.map(q=>[q.id,q]));

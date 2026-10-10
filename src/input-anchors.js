@@ -1,3 +1,4 @@
+import {explicitDuration} from './explicit-duration.js';
 import {supplementState,answerText} from './supplementary.js';
 import {eventDate} from './age-validation.js';
 ﻿export const dateParts=text=>[...String(text||'').matchAll(/((?:18|19|20|21)\d{2})年(?:(\d{1,2})月(?:(\d{1,2})日)?)?/g)].map(m=>({year:+m[1],month:m[2]?+m[2]:null,...(m[3]?{day:+m[3]}:{}),text:m[0]})).filter(d=>d.month==null||d.month>=1&&d.month<=12);
@@ -6,7 +7,7 @@ export function timeAnchors(b,now=new Date()){
  const eventSources=sources.filter(d=>!/(?:观察|只看|只写)[：:]?\s*$/.test(d.source.slice(0,d.source.indexOf(d.text))));
  const start=eventSources.find(d=>d.field==='hypotheticalDirection')||eventSources.find(d=>d.field==='realityOutcome')||(/^\d{4}$/.test(b.birthYear||'')&&/^\d{1,3}$/.test(b.forkAge||'')?{year:+b.birthYear+ +b.forkAge,month:null,estimated:true}:null);
  const window=observationWindow(b,start,now);
- return {window,start,sources,asOf:now.toISOString().slice(0,10),currentYear:now.getFullYear(),currentMonth:now.getMonth()+1,observationRange:(b.hypotheticalDirection||'').match(/(?:只写|只看|仅写|仅看)([^。；]+)/)?.[1]||null};
+ return {window,start,sources,asOf:now.toISOString().slice(0,10),currentYear:now.getFullYear(),currentMonth:now.getMonth()+1,observationRange:(b.hypotheticalDirection||'').match(/(?:只写|只看|仅写|仅看)([^。；]+)/)?.[1]||explicitDuration(b.hypotheticalDirection)?.text||null};
 }
 export function futureScenario(b,a=timeAnchors(b)){const start=a.start,year=a.currentYear||Number(a.asOf?.slice(0,4)),month=a.currentMonth||Number(a.asOf?.slice(5,7));return Boolean(start&&(start.year>year||start.year===year&&start.month>month)||!start&&/未来.*(?:设想|探索|可能)|从现在起未来/.test(b.hypotheticalDirection||''));}
 export function scenePhase(scene,b){const a=timeAnchors(b),d=dateParts(scene.time)[0];if(/回忆|此前|回顾/.test(scene.time||''))return 'memory';if(!d&&futureScenario(b,a))return 'future';return /未来|设想|可能情景|计划/.test(scene.time||'')||d&&(d.year>a.currentYear||d.year===a.currentYear&&d.month>a.currentMonth)?'future':/回忆|此前|回顾/.test(scene.time||'')?'memory':'past';}
@@ -87,6 +88,7 @@ export function observationWindow(b,fork,now=new Date()){
  const stay=!/(?:现实|过去|曾经|以前)/.test(text)&&(field==='hypotheticalDirection'||/(?:驻留|停留|旅居)/.test(b.hypotheticalDirection||''))?(normalized.match(/(?:驻留|停留|旅居)([0-9一二两三四五六七八九十]+)个月/)||normalized.match(/([0-9一二两三四五六七八九十]+)个月[^。；，,]{0,8}(?:驻留|停留|旅居)/)):null;
  return m||stay?[{field,text,months:smallNumber((m||stay)[1]),...(stay?{scenarioDuration:true}:{})}]:[];
  }));
+ const duration=explicitDuration(b.hypotheticalDirection);if(duration&&!sources.length)sources.push({field:'hypotheticalDirection',text:duration.text,months:duration.months,scenarioDuration:true});
  if(!sources.length)return null;const item=sources.at(-1);if(!item.months)return null;
  const explicitNow=/从现在|从今天/.test(item.text),explicitFork=Boolean(item.scenarioDuration)||/从当年|从那年|从那次|分[岔叉].{0,8}起|从(?:19|20)\d{2}年|接下来|之后|随后|以后/.test(item.text),future=/未来/.test(item.text);
  const current={year:now.getFullYear(),month:now.getMonth()+1,day:now.getDate()};

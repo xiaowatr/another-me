@@ -1,0 +1,3 @@
+
+/* History reuse keeps long original answers readable. */
+.history-reuse-dialog .reuse-item{padding:14px 0;border-bottom:1px solid #ddd3c7}.reuse-item label{display:flex;gap:10px;align-items:flex-start;font-weight:600}.reuse-item input[type=checkbox]{width:18px;height:18px;flex:none}.reuse-item p,.reuse-item summary{white-space:pre-wrap;overflow-wrap:anywhere}.reuse-item summary{cursor:pointer}.history-reuse-dialog header{flex-shrink:0}

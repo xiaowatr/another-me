@@ -1,3 +1,5 @@
+import {LIFE_STATUS_OPTIONS} from '../src/life-background.js';
+import {validateHistoryReuse} from '../src/history-reuse-data.js';
 import {validateSupplement} from '../src/supplementary.js';
 import {ageFieldErrors} from '../src/age-validation.js';
 import {strictJson,normalizeChapters} from './structured-story.js';
@@ -93,14 +95,17 @@ export function parseResult(content, task, diagnostic = {}) {
     throw new AppError('invalid_response',502,{stage:'schema',reason,...(index!==undefined?{field:'scenes.'+index}:{}),...(code==='chapter_count'?{actualCount:data.scenes.length,minCount:3,maxCount:4}:{})});
   }
   if(diagnostic.fixedThreeChapters&&data.scenes?.length!==3)throw new AppError('invalid_response',502,{stage:'schema',reason:'chapter_count',actualCount:data.scenes?.length,minCount:3,maxCount:3});
-  if ((data.kind !== undefined && data.kind !== 'story') || !['title', 'identity', 'intro', 'character', 'opening'].every(k => str(data[k], 2000)) || !Array.isArray(data.scenes) || (data.scenes.length < 3 || data.scenes.length > 4) || !data.scenes.every(s => str(s.time, 60) && str(s.title, 150) && str(s.text, 2000))) throw new AppError('invalid_response', 502,{stage:'schema',reason:'story_fields'});
-  return { kind: 'story', title: data.title, ...(typeof data.synopsis==='string'?{synopsis:data.synopsis.slice(0,180)}:{}), identity: data.identity, intro: data.intro, character: data.character, opening: data.opening, scenes: data.scenes.map(({ time, title, text }) => ({ time, title, text })) };
+  if ((data.kind !== undefined && data.kind !== 'story') || ![...['title', 'identity', 'intro', 'character'],...(diagnostic.bodyOnly?[]:['opening'])].every(k => str(data[k], 2000)) || !Array.isArray(data.scenes) || (data.scenes.length < 3 || data.scenes.length > 4) || !data.scenes.every(s => str(s.time, 60) && str(s.title, 150) && str(s.text, 2000))) throw new AppError('invalid_response', 502,{stage:'schema',reason:'story_fields'});
+  return { kind: 'story', title: data.title, ...(typeof data.synopsis==='string'?{synopsis:data.synopsis.slice(0,180)}:{}), identity: data.identity, intro: data.intro, character: data.character, opening: diagnostic.bodyOnly?'':data.opening, scenes: data.scenes.map(({ time, title, text }) => ({ time, title, text })) };
 }
 export function validateBackground(b,{newSubmission=false}={}) {
-  try{validateSupplement(b||{});}catch{throw new AppError('input');}
+  try{validateSupplement(b||{});validateHistoryReuse(b||{});}catch{throw new AppError('input');}
   if(newSubmission&&Object.keys(ageFieldErrors(b||{})).length)throw new AppError('input',400,{fieldErrors:ageFieldErrors(b||{})});
   if(b && 'realityOutcome' in b){
     if(!['realityOutcome','hypotheticalDirection'].every(k=>str(b[k],k==='forkTime'?80:1500)) || typeof b.details!=='string' || b.details.length>1500) throw new AppError('input');
+    if(b.lifeStatus!=null&&(typeof b.lifeStatus!=='string'||b.lifeStatus&&!LIFE_STATUS_OPTIONS.includes(b.lifeStatus)))throw new AppError('input');
+    if(['lifeStatusScope','lifeSituationScope'].some(k=>b[k]!=null&&(typeof b[k]!=='string'||b[k]&&!['now','at_fork'].includes(b[k]))))throw new AppError('input');
+    if(['lifeSituation','relatedExperience','additionalInfo'].some(k=>b[k]!=null&&(typeof b[k]!=='string'||b[k].length>1500)))throw new AppError('input');
     if(b.choiceReason && (typeof b.choiceReason!=='string'||b.choiceReason.length>1500))throw new AppError('input');
     if(['不填写','unknown'].includes(b.gender))b={...b,gender:''};
     if(b.gender && !['女','男','非二元','不透露'].includes(b.gender))throw new AppError('input');

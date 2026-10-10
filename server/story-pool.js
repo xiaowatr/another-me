@@ -1,3 +1,6 @@
+import {fillStoryMetadata} from './story-metadata.js';
+import {storyRequestInput} from './story-request.js';
+import {fillStoryOpening,FIXED_OPENING} from './story-opening.js';
 import {fillStoryIdentity} from './generation-input.js';
 import {schemaRetryFeedback,hardRetryFeedback,withRetryFeedback} from './generation-retry.js';
 import {fieldRepairPlan,fieldRepairMessages,applyFieldRepair} from './story-field-repair.js';
@@ -15,13 +18,13 @@ export async function chooseStoryPool({caller,messages,background,effectiveSetti
   const repair=state.pendingRepair||null;state.pendingRepair=null;
   const attemptMessages=repair?fieldRepairMessages(messages,repair.story,repair.plan):withRetryFeedback(messages,state.retryFeedback||null);
   try{
-   response=await caller.call('story',attemptMessages,{signal,onStart:id=>requestId=id,...(repair?{repairFields:repair.plan.fields,parentRequestId:repair.sourceId}:{}),diagnosticRange:effectiveSetting.temporal?.window,diagnosticClock:effectiveSetting.temporal,validateResult:r=>{if(r.kind==='clarification'&&(repair||!JSON.parse(messages.at(-1).content).canClarify))throw new AppError('invalid_response',502,{stage:'business',reason:'repeated_clarification'});}});
+   response=await caller.call('story',attemptMessages,{signal,onStart:id=>requestId=id,...(repair?{repairFields:repair.plan.fields,parentRequestId:repair.sourceId}:{}),diagnosticRange:effectiveSetting.temporal?.window,diagnosticClock:effectiveSetting.temporal,validateResult:r=>{if(r.kind==='clarification'&&(repair||!storyRequestInput(messages).canClarify))throw new AppError('invalid_response',502,{stage:'business',reason:'repeated_clarification'});}});
    if(repair){const merged=applyFieldRepair(repair.story,response.result,repair.plan,messages,background,effectiveSetting);response.result=merged.result;issues=merged.issues;originalIdentity=repair.originalIdentity;}
   }catch(e){if(signal?.aborted||fatal(e))throw e;state.retryFeedback=repair?null:schemaRetryFeedback(e,messages);keep({id:e.requestId||requestId||randomUUID(),sequence:state.generated-1,attemptKind:repair?'field_repair':'generation',...(repair?{repairSourceId:repair.sourceId,repairedFields:repair.plan.fields}:{}),eligible:false,failure:{category:e.category||'network',diagnostic:e.diagnostic||null},payload:null});continue;}
   if(response.result.kind==='clarification')return response;
-  if(!repair){originalIdentity=response.result.identity;response.result=fillStoryIdentity(response.result,effectiveSetting);issues=hardStoryIssues(response.result,background,effectiveSetting);}
+  if(!repair){originalIdentity=response.result.identity;response.result=fillStoryMetadata(fillStoryIdentity(fillStoryOpening(response.result),effectiveSetting),storyRequestInput(messages).effectiveSetting);issues=hardStoryIssues(response.result,background,effectiveSetting);}
   state.retryFeedback=hardRetryFeedback(issues,effectiveSetting);
-  const draft={id:response.requestId||requestId||randomUUID(),sequence:state.generated-1,attemptKind:repair?'field_repair':'generation',...(repair?{repairSourceId:repair.sourceId,repairedFields:repair.plan.fields}:{}),eligible:issues.length===0,hardIssues:issues,programFilledFields:{identity:{original:originalIdentity,value:response.result.identity,basis:'产品本人主角定义与已给locationText'}},payload:{background,effectiveSetting,story:response.result}};
+  const draft={id:response.requestId||requestId||randomUUID(),sequence:state.generated-1,attemptKind:repair?'field_repair':'generation',...(repair?{repairSourceId:repair.sourceId,repairedFields:repair.plan.fields}:{}),eligible:issues.length===0,hardIssues:issues,programFilledFields:{identity:{original:originalIdentity,value:response.result.identity,basis:'产品本人主角定义与已给locationText'},opening:{value:FIXED_OPENING,basis:'固定简短开场，不新增已发生事实'}},payload:{background,effectiveSetting,story:response.result}};
   keep(draft);
   if(draft.eligible){onDraft({...draft,selected:true,delivery:{status:repair?'program_accepted_after_field_repair':'program_accepted'}});return {result:response.result,requestId:draft.id};}
   // At most one local repair for a given draft. A failed repair can use a remaining full attempt.

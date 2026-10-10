@@ -1,0 +1,7 @@
+import React from 'react';
+import {LIFE_STATUS_OPTIONS,lifeBackgroundLabels,lifeSituationPlaceholder} from './life-background.js';
+export default function LifeBackgroundFields({background,timeScope,onChange}){
+ const labels=lifeBackgroundLabels(timeScope),change=(name,value)=>onChange({target:{name,value}});
+ const scopeChanged=['lifeStatus','lifeSituation'].some(name=>background[name]&&(background[name==='lifeStatus'?'lifeStatusScope':'lifeSituationScope']||'at_fork')!==timeScope);
+ return <section className="life-background-fields" aria-label="故事开始前的生活"><fieldset className="life-status"><legend>{labels.status}</legend><div className="question-options">{LIFE_STATUS_OPTIONS.map(value=><button key={value} type="button" aria-pressed={background.lifeStatus===value} onClick={()=>change('lifeStatus',background.lifeStatus===value?'':value)}>{value}</button>)}</div></fieldset>{scopeChanged&&<p className="small">已保留原来的生活信息，其中有{timeScope==='now'?'当时':'现在'}的情况。更换故事起点后，请核对是否还适用。</p>}{(background.lifeStatus&&background.lifeStatus!=='不想透露'||background.lifeSituation)&&<label className="field">{labels.detail}<textarea name="lifeSituation" value={background.lifeSituation||''} onChange={onChange} maxLength={1500} rows={2} placeholder={lifeSituationPlaceholder(background.lifeStatus)}/></label>}<label className="field">在这件事之前，你有过哪些相关经历？<textarea name="relatedExperience" value={background.relatedExperience||''} onChange={onChange} maxLength={1500} rows={2} placeholder="比如以前学过一点、一直没试过，或者曾经中断过。不记得也可以留空。"/></label></section>;
+}

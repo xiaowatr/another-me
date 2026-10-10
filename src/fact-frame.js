@@ -1,6 +1,6 @@
 import {safeOpeningAddress} from './participant-identity.js';
 import {storyClock,beyondStoryEnd} from './story-clock.js';
-import {scenePhase} from './input-anchors.js';
+import {scenePhase,timeAnchors} from './input-anchors.js';
 import {replacementIssues,durationIssues,placementIssues,relevantAnswer} from './consistency.js';
 ﻿import {coordinates} from './context.js';
 const ended=/(去世|离世|过世|病故|身故|死亡|倒闭|停办|拆除)/;
@@ -82,4 +82,11 @@ export function currentOpening(story,background){
  if(/现在|如今|此刻/.test(story.opening||'')&&!inspectFactText(story.opening,background).length&&!/今年暑假|今年夏天/.test(story.opening))return safeOpeningAddress(story.opening,background);
  return year?`我在这里。那条路已经走过来了，${year}年的事，可以慢慢说。`:'我在这里。那条路已经走过来了，你想从哪里聊起？';
 }
-export function sceneTimeLabel(time,background){if(/\d{4}年|同年|次年|翌年/.test(time))return time;return /年份未明确/.test(time)?time:`${time} · 年份未明确`;}
+export function sceneTimeLabel(time,background){
+ if(/\d{4}年|同年|次年|翌年/.test(time))return time;
+ const start=timeAnchors(background||{}).start;
+ // Display the explicit story origin, not an inferred calendar year for this scene.
+ // Relative weeks/months can cross a year boundary when the starting month is unknown.
+ if(start&&!start.estimated&&!/回忆|此前|回顾|小时候|童年/.test(time))return `${start.year}年起 · ${String(time).replace(/ · 年份未明确$/,'')}`;
+ return /年份未明确/.test(time)?time:`${time} · 年份未明确`;
+}

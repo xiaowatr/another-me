@@ -128,3 +128,7 @@
 @media(hover:hover) and (pointer:fine){.supplement-dialog .question-options button:not([aria-pressed=true]):hover{background:#35534309}}
 
 .supplement-save-note{margin:0;text-align:center}.supplement-wait p{margin:8px 0}.supplement-dialog .supplement-skip{width:100%;white-space:normal;overflow-wrap:anywhere}.form-top{display:flex;gap:16px;flex-wrap:wrap}.life-home>.page-top{align-items:center}.life-home>.page-top h1{margin:0}.life-home>.page-top>.text-button{white-space:nowrap}
+
+.question-history{margin:1rem 0;text-align:left}.question-history summary{cursor:pointer}.question-history li{margin:.8rem 0}.question-history p{white-space:pre-wrap;overflow-wrap:anywhere}.closing-row .small{margin:.5rem 0}
+
+.life-status{border:0;padding:0;margin:.8rem 0}.life-status legend{padding:0;font-weight:600}.life-background-fields .question-options{margin-top:.7rem}

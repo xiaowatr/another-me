@@ -1,3 +1,7 @@
+import {chatEnvelope} from './chat-envelope.js';
+import {fillStoryMetadata} from './story-metadata.js';
+import {storyRequestInput} from './story-request.js';
+import {fillChapterTimes} from './story-time-labels.js';
 import {receiveStructured} from './structured-response.js';
 import {createFailureEvidence} from './failed-outputs.js';
 import {PLANNER_VERSION} from './supplementary-planner.js';
@@ -38,7 +42,7 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       const noThinking=task==='memory'||task==='questions';
       record.thinking=noThinking?'disabled':task==='story'?(config.storyThinking||'disabled'):'unchanged';
       record.maxCompletionTokens=options.repairFields?1200:task==='memory'?(config.memoryMaxTokens||2000):task==='story'?6000:3500;
-      const transportTools=task==='story'?(options.repairFields?fieldRepairTools(options.repairFields):storyTools(messages)):null;
+      const transportTools=task==='story'?(options.repairFields?fieldRepairTools(options.repairFields,messages):storyTools(messages)):null;
       if(options.repairFields)record.repairFields=options.repairFields;
       stage('transport');
       const response = await fetchImpl(`${config.base}/chat/completions`, {
@@ -50,6 +54,8 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       record.httpStatus=response.status;
       if(options.onText && response.ok && response.headers.get('content-type')?.includes('text/event-stream')) {
         stage('stream');
+        const envelope=options.chatEnvelope?chatEnvelope(text=>{const safe=textFilterForEnvelope(text);if(safe){if(record.firstBodyMs==null)record.firstBodyMs=Date.now()-started;reply+=safe;if(reply.length>6000)throw new AppError('invalid_response',502);options.onText(safe);}}):null;
+        const textFilterForEnvelope=textFilter();
         const filter=textFilter(); let reply='',finish=null,done=false;
         for await(const data of readSSE(response.body)){
           if(data==='[DONE]'){done=true;break;}
@@ -58,11 +64,13 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
           if(item.error || Number(item.base_resp?.status_code || 0)) throw new AppError(classify(response.status,item),502);
           const choice=item.choices?.[0]; if(choice?.finish_reason)finish=choice.finish_reason;
           if(typeof choice?.delta?.content==='string'){
+            if(options.chatEnvelope){envelope.push(choice.delta.content);continue;}
             const text=filter(choice.delta.content);
             if(text){if(record.firstBodyMs==null)record.firstBodyMs=Date.now()-started;reply+=text;if(reply.length>6000)throw new AppError('invalid_response',502);options.onText(text);}
           }
         }
         record.streamShape={doneMarker:done,finish:['stop','length','content_filter','tool_calls'].includes(finish)?finish:'unknown',bodyLength:reply.length};
+        if(finish==='stop'&&envelope){let result;try{result=envelope.finish();}catch{throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_envelope'});}if(!reply.trim())throw new AppError('invalid_response',502);result.reply=reply;options.validateResult?.(result);record.success=true;return {result,requestId:record.requestId};}
         if(finish!=='stop' || !reply.trim())throw new AppError('invalid_response',502);
         const result={reply,updateType:'none'};options.validateResult?.(result);record.success=true;return {result,requestId:record.requestId};
       }
@@ -97,10 +105,11 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
         const received=receiveStructured(content,task,transportTools,messages,record.parsing);
         record.schemaValidation={valid:received.errors.length===0,errors:received.errors.slice(0,60),repairs:received.repairs};
         if(received.errors.length){throw new AppError('invalid_response',502,{stage:'schema',reason:'structured_schema',field:received.errors[0].path});}
+        if(!options.repairFields&&storyRequestInput(messages).generationStage==='body'&&received.data.kind==='story'){fillChapterTimes(received.data,storyRequestInput(messages).effectiveSetting);received.data=fillStoryMetadata(received.data,storyRequestInput(messages).effectiveSetting);record.programFilledChapterTimes=true;record.programFilledStoryMetadata=true;}
         content=JSON.stringify(received.data);
       }
       const normalizedParsing=transportTools?{}:record.parsing;
-      if(task==='story')normalizedParsing.fixedThreeChapters=true;
+      if(task==='story'){normalizedParsing.fixedThreeChapters=true;normalizedParsing.bodyOnly=!options.repairFields&&storyRequestInput(messages).generationStage==='body';}
       const result = options.repairFields?JSON.parse(content):parseResult(content, task,normalizedParsing);
       if(transportTools)for(const [key,value]of Object.entries(normalizedParsing))if(key!=='parseMode')record.parsing[key]=value;
       record.parsedShape={kind:result.kind||null,sceneCount:Array.isArray(result.scenes)?result.scenes.length:null,sceneBodyLengths:result.scenes?.map(s=>typeof s.text==='string'?s.text.length:null)||null};

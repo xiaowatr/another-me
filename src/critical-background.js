@@ -7,20 +7,22 @@ export function mergeCriticalGaps(existing,incoming,sources){
  for(const g of [...(Array.isArray(existing)?existing:[]),...(Array.isArray(incoming)?incoming:[])]){
   if(!validCriticalGap(g)||!map.get(g.sourceId)?.includes(g.evidence))continue;
   const old=items.get(g.key);if(!old&&items.size>=8)continue;
-  const resolution=g.resolvedBy&&bounded(g.resolvedBy.evidence,500)&&map.get(g.resolvedBy.sourceId)?.includes(g.resolvedBy.evidence)?{sourceId:g.resolvedBy.sourceId,evidence:g.resolvedBy.evidence}:old?.resolvedBy;
+  const resolution=g.resolvedBy&&bounded(g.resolvedBy.evidence,500)&&map.get(g.resolvedBy.sourceId)?.includes(g.resolvedBy.evidence)?{sourceId:g.resolvedBy.sourceId,evidence:g.resolvedBy.evidence}:undefined;
   const next={key:g.key,missingInformation:g.missingInformation,whyMissing:g.whyMissing,useInStory:g.useInStory,sourceId:g.sourceId,evidence:g.evidence,...(g.questionText?{questionText:g.questionText}:{}),...(g.questionId?{questionId:g.questionId}:{}),...(g.blocksStory?{blocksStory:g.blocksStory}:{})};
   if(old?.questionId){next.questionId=old.questionId;next.questionText=old.questionText;}
-  if(resolution)next.resolvedBy=resolution;items.set(g.key,next);
+  if(resolution)next.resolvedBy=resolution;else if(old?.resolvedBy&&map.get(old.resolvedBy.sourceId)?.includes(old.resolvedBy.evidence))next.resolvedBy=old.resolvedBy;items.set(g.key,next);
  }return [...items.values()];
 }
 export function criticalGapStatus(g,state,answerText,isUnknown){
  const a=g.questionId&&state.answers?.[g.questionId],text=answerText(a);
  if(a?.skipped||isUnknown(text))return {...g,status:'skipped',asked:Boolean(state.shown?.includes(g.questionId)),answer:null};
  if(text)return {...g,status:'answered',asked:true,answer:{questionId:g.questionId,text,selected:a.selected||[],answerContext:state.answerScopes?.[g.questionId]||null}};
- if(g.resolvedBy)return {...g,status:'answered',asked:Boolean(state.shown?.includes(g.questionId)),answer:{sourceId:g.resolvedBy.sourceId,text:g.resolvedBy.evidence}};
+ const confirmed=(state.confirmationContexts||[]).find(x=>x.gapKeys?.includes(g.key)&&x.question===g.questionText),index=confirmed?.sourceIndex;
+ if(confirmed&&Number.isInteger(index)&&state.confirmations?.[index]?.trim()&&!isUnknown(state.confirmations[index]))return {...g,status:'answered',asked:true,answer:{sourceId:'confirmation:'+index,text:state.confirmations[index]}};
+ if(g.resolvedBy)return {...g,status:'unconfirmed',asked:Boolean(state.shown?.includes(g.questionId)),answer:null};
  return {...g,status:state.plan?.optionalAnalysisUnavailable?'analysis_unavailable':state.skippedRemaining?'skipped':state.shown?.includes(g.questionId)?'unanswered':'unasked',asked:Boolean(state.shown?.includes(g.questionId)),answer:null};
 }
 export function settingRecord(background,state,sources,answerText,isUnknown){
- const gaps=mergeCriticalGaps(state.criticalUnknowns||state.plan?.criticalUnknowns,[],sources).map(g=>criticalGapStatus(g,state,answerText,isUnknown));
- return {factsAndConstraints:sources.filter(s=>!['hypotheticalDirection','mbti'].includes(s.id)).map(s=>({sourceId:s.id,text:s.text,scope:'用户原话证据；结合原句区分现实、约束与愿望，不把全文都视为已发生'})),parallelAssumption:{sourceId:'hypotheticalDirection',text:background.hypotheticalDirection||'',scope:'用户指定改变，只在平行线中成立'},criticalBackground:gaps,creativeSpace:['由明确假设支持的普通场景、动作与现场对话；旧工位、继续原课所隐含的熟悉工作室和认识原老师可展开，不擅定是否中断；不新增家人参与、家庭构成、关键身份或重大背景'],unknownPolicy:'关键背景未得到明确答案时保持未知，使用不依赖它的情节；跳过、分析失败或问题结束都不是创作许可。answered仅表示有原话回答，仍须按其实际含义理解，不能把含糊回答视为确定事实。'};
+ const gaps=mergeCriticalGaps(state.criticalUnknowns?.length?state.criticalUnknowns:state.plan?.criticalUnknowns,[],sources).map(g=>criticalGapStatus(g,state,answerText,isUnknown));
+ return {factsAndConstraints:sources.filter(s=>!['hypotheticalDirection','mbti'].includes(s.id)).map(s=>({sourceId:s.id,text:s.text,scope:'用户原话证据；结合原句区分现实、约束与愿望，不把全文都视为已发生'})),parallelAssumption:{sourceId:'hypotheticalDirection',text:background.hypotheticalDirection||'',scope:'用户指定改变，只在平行线中成立'},criticalBackground:gaps,creativeSpace:['由明确假设支持的普通场景、动作与现场对话；未确认的原课程、原老师或中断经历保持未知；不新增家人参与、家庭构成、关键身份或重大背景'],unknownPolicy:'关键背景未得到明确答案时保持未知，使用不依赖它的情节；跳过、分析失败或问题结束都不是创作许可。answered仅表示有原话回答，仍须按其实际含义理解，不能把含糊回答视为确定事实。'};
 }

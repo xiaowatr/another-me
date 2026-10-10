@@ -25,7 +25,7 @@ export function compileSetting(input){
  // Explicit independently dated endings are retained without importing the alternative choice.
  const critical=criticalFacts(b);if(!critical.overrideExplicit)for(const event of critical.events){const field=['realityOutcome','details','choiceReason','followupAnswer'].find(k=>(b[k]||'').includes(event.text))||'realityOutcome';retained.push({text:event.text,source:source(field,event.text)});}
  const known=[];for(const clause of (b.details||'').split(/[。；]/).filter(Boolean))if(/^(我们|我|双方).*(原本|原来|当时|已经)/.test(clause))known.push({text:clause,source:source('details',clause)});
- const range=direction.match(/(?:只看|只写|仅写|仅看)([^。；]+)/)?.[1]||null;
+ const range=timeAnchors(b).observationRange;
  return {personalization:personal,version:1,lifeSituation:b.lifeSituation||'',operation,realityReference:operation==='unknown'?{event:timeline.atFork.eventAndMotivation.filter(x=>x!==b.choiceReason).join('。'),meaning:'现实中的事件参照，不是平行人生已经发生的结果',source:source('realityOutcome',real)}:null,change:{text:direction,source:source('hypotheticalDirection',direction)},facts,retained,known,roleGender:roleGender(b),temporal:timeAnchors(b),timeRange:range,coordinates:coordinates(b),style:{mbti:b.mbti&&b.mbti!=='unknown'?b.mbti:null,gender:b.gender&&b.gender!=='不透露'?b.gender:null},supplement:timeline.unclassifiedSupplement.join('。'),considerations:timeline.imagined.considerations,reportedSpeech:timeline.atFork.reportedSpeech,explicitPremises:timeline.imagined.explicitPremises,answer:b.followupSkipped?'':b.followupAnswer||'',choiceReason:b.choiceReason||'',unknown:['未填写的现实身份与经历','未能用明确句式解析的语义仍需模型理解'],clarifications:issues,original:{...b}};
 }
 export function generationSetting(c){
