@@ -127,7 +127,7 @@ export function loadConfig(env) {
   const allowed = { cn: ['https://api.minimax.cn/v1','https://api.minimaxi.com/v1'], intl: ['https://api.minimax.io/v1'] };
   const valid = allowed[site]?.includes(base) && /^MiniMax-[\w.-]+$/.test(model);
   const storyThinking=env.MINIMAX_STORY_THINKING||'disabled';if(!['disabled','adaptive'].includes(storyThinking))throw new Error('MINIMAX_STORY_THINKING只能为disabled或adaptive');
-  const maxConcurrent=Number(env.MODEL_MAX_CONCURRENT||3);if(!Number.isInteger(maxConcurrent)||maxConcurrent<1||maxConcurrent>5)throw new Error('MODEL_MAX_CONCURRENT须为1至5的整数');
+  const maxConcurrent=Number(env.MODEL_MAX_CONCURRENT||5);if(!Number.isInteger(maxConcurrent)||maxConcurrent<1||maxConcurrent>5)throw new Error('MODEL_MAX_CONCURRENT须为1至5的整数');
   const memoryModel=env.MINIMAX_MEMORY_MODEL||'MiniMax-M3';const memoryMaxTokens=Number(env.MINIMAX_MEMORY_MAX_TOKENS||2000);const memoryThinking=env.MINIMAX_MEMORY_THINKING||'disabled';if(!/^MiniMax-[\w.-]+$/.test(memoryModel)||memoryThinking!=='disabled'||!Number.isInteger(memoryMaxTokens)||memoryMaxTokens<256||memoryMaxTokens>2000)throw Error('Invalid memory configuration');
   return { key, site, base, model, memoryModel,memoryMaxTokens,memoryThinking, storyThinking,maxConcurrent, mode: key ? valid ? 'real' : 'configuration' : 'demo' };
 }

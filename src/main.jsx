@@ -256,7 +256,7 @@ function App() {
     if(!retry)setDraft('');composer.current?.focus({preventScroll:true});
     let failure=null;
     try{
-      t.failureStage='restore';const restored=await experience.restore({background:generatedBackground,story,memories,corrections:explicitCorrections(messages,contextStart),roleRecords:selectRoleRecords(roleRecords(messages,generatedBackground,memories,contextStart),text),history:modelHistory(messages,messageId,contextStart)},sessionId,t.controller.signal);
+      t.failureStage='restore';const restored=await experience.restore({background:generatedBackground,story,memories,corrections:explicitCorrections(messages,contextStart),roleRecords:selectRoleRecords(roleRecords(messages,generatedBackground,memories,contextStart),text),history:modelHistory(messages,messageId,contextStart)},sessionId,t.controller.signal,lifeId);
       t.sessionId=restored.sessionId;setSessionId(restored.sessionId);setSyncFailed(false);
       if(t.stopped)throw new Error('已停止');
       t.failureStage='stream';await streamReply({sessionId:t.sessionId,message:text,intent,messageId},{signal:AbortSignal.any([t.controller.signal,AbortSignal.timeout(100000)]),onEvent:e=>{

@@ -39,7 +39,7 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       options.onStart?.(record.requestId);
       trace?.modelStart(record.requestId,config.model,task);record.sent = true;
       fs.appendFileSync(auditPath,JSON.stringify(record)+'\n');emit(record);
-      const noThinking=task==='memory'||task==='questions';
+      const noThinking=task==='memory'||task==='questions'||task==='chat';
       record.thinking=noThinking?'disabled':task==='story'?(config.storyThinking||'disabled'):'unchanged';
       record.maxCompletionTokens=options.repairFields?1200:task==='memory'?(config.memoryMaxTokens||2000):task==='story'?6000:3500;
       const transportTools=task==='story'?(options.repairFields?fieldRepairTools(options.repairFields,messages):storyTools(messages)):null;
@@ -64,13 +64,13 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
           if(item.error || Number(item.base_resp?.status_code || 0)) throw new AppError(classify(response.status,item),502);
           const choice=item.choices?.[0]; if(choice?.finish_reason)finish=choice.finish_reason;
           if(typeof choice?.delta?.content==='string'){
-            if(options.chatEnvelope){envelope.push(choice.delta.content);continue;}
+            if(options.chatEnvelope){try{envelope.push(choice.delta.content);}catch(e){record.chatEnvelopeShape=envelope.shape();record.chatEnvelopeError=/^chat_envelope_[a-z_]+$/.test(e.message)?e.message:'invalid_json';throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_envelope'});}continue;}
             const text=filter(choice.delta.content);
             if(text){if(record.firstBodyMs==null)record.firstBodyMs=Date.now()-started;reply+=text;if(reply.length>6000)throw new AppError('invalid_response',502);options.onText(text);}
           }
         }
         record.streamShape={doneMarker:done,finish:['stop','length','content_filter','tool_calls'].includes(finish)?finish:'unknown',bodyLength:reply.length};
-        if(finish==='stop'&&envelope){let result;try{result=envelope.finish();}catch{throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_envelope'});}if(!reply.trim())throw new AppError('invalid_response',502);result.reply=reply;options.validateResult?.(result);record.success=true;return {result,requestId:record.requestId};}
+        if(finish==='stop'&&envelope){record.chatEnvelopeShape=envelope.shape();let result;try{result=envelope.finish();}catch(e){const reason=String(e.message||'');record.chatEnvelopeError=/^chat_envelope_[a-z_]+$/.test(reason)?reason:reason.startsWith('duplicate_field:')?'duplicate_field':'invalid_json';throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_envelope'});}if(!reply.trim())throw new AppError('invalid_response',502);result.reply=reply;record.streamShape.bodyLength=reply.length;options.validateResult?.(result);record.success=true;return {result,requestId:record.requestId};}
         if(finish!=='stop' || !reply.trim())throw new AppError('invalid_response',502);
         const result={reply,updateType:'none'};options.validateResult?.(result);record.success=true;return {result,requestId:record.requestId};
       }

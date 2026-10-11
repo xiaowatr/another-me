@@ -19,18 +19,18 @@ import {migrateBackground} from '../src/background.js';
 ﻿import { checkChatGrounding } from './grounding.js';
 import { selectEra } from './era.js';
 import { coordinates } from '../src/context.js';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { AppError, validateBackground, parseResult } from './core.js';
 import { storyMessages, chatMessages, streamingChatMessages, PROMPT_VERSION } from './prompts.js';
 import { demoStory, demoProvider } from '../src/services/demo.js';
 export function createExperience(config, caller, recordLocal = () => {}) {
-  const questionTasks=createPlannerTasks(b=>exclusive('questions',async()=>{if(config.mode==='demo')return normalizePlan({questions:[],covered:[],expectations:{}},b);return planWithGapCheck(b,caller);}));
+  const questionTasks=createPlannerTasks(b=>exclusive('questions',async()=>{if(config.mode==='demo')return normalizePlan({questions:[],covered:[],expectations:{}},b);return planWithGapCheck(b,caller);},'questions:'+createHash('sha256').update(JSON.stringify(b)).digest('hex')));
   const sessions = new Map();
-  const slots=createSlots(config.maxConcurrent||3);
-  async function exclusive(task, fn) {
+  const slots=createSlots(config.maxConcurrent||5);
+  async function exclusive(task, fn, scope=task) {
     const started = Date.now(); let upstreamRecorded = false; let success = false; let category = null; let release = null;
     try {
-      release=slots.acquire(currentOwner(),task);
+      release=slots.acquire(currentOwner(),task,scope);
       const result = await fn(); upstreamRecorded = Boolean(result.requestId); success = true; return result;
     } catch (e) { if(!release&&e.category==='busy')e.retryableBeforeModel=true;upstreamRecorded = Boolean(e.requestId); category = e.category || 'upstream'; throw e; }
     finally {
@@ -42,22 +42,23 @@ export function createExperience(config, caller, recordLocal = () => {}) {
   return {
     questions:input=>questionTasks(currentOwner(),validateBackground(migrateBackground(input.background))),
     availability:()=>slots.availability(currentOwner()),
-    checkAvailable:owner=>slots.check(owner),
-    memory:(data,batchId)=>exclusive('memory',async()=>{const response=await caller.call('memory',memoryMessages(data),{memoryBatchId:batchId,validateResult:r=>normalizeMemoryResult(r,data,batchId)});return {...normalizeMemoryResult(response.result,data,batchId),requestId:response.requestId};}),
+    checkAvailable:owner=>slots.check(owner,'story-admission'),
+    memory:(data,batchId)=>exclusive('memory',async()=>{const response=await caller.call('memory',memoryMessages(data),{memoryBatchId:batchId,validateResult:r=>normalizeMemoryResult(r,data,batchId)});return {...normalizeMemoryResult(response.result,data,batchId),requestId:response.requestId};},'memory:'+batchId),
     restore(input){
       // Restoring one browser never blocks an unrelated browser.
-      slots.checkOwner(currentOwner());
+      
       const data=input.snapshot;
       if(!data || !Array.isArray(data.history) || data.history.length>12 || !Array.isArray(data.memories) || data.memories.length>30)throw new AppError('input');
       const background=validateBackground(migrateBackground(data.background)),story=parseResult(JSON.stringify(data.story),'story');
       if(story.kind!=='story')throw new AppError('input');
       const history=data.history.map(m=>{if(!['user','assistant'].includes(m.role)||typeof m.content!=='string'||m.content.length>6000)throw new AppError('input');return {role:m.role,content:m.content};});
       const memories=data.memories.filter(m=>m.sourceRole!=='assistant'||m.type==='fiction').map(m=>{if(!['reality','preference','fiction'].includes(m.type)||typeof m.text!=='string'||!m.text.trim()||m.text.length>1000)throw new AppError('input');return {id:String(m.id).slice(0,80),type:m.type,text:m.text,sourceYear:Number.isInteger(m.sourceYear)?m.sourceYear:null};});
+      const scopeId=typeof input.lifeId==='string'&&input.lifeId.length<=180?input.lifeId:createHash('sha256').update(JSON.stringify({background,story})).digest('hex');slots.checkOwner(currentOwner(),'chat:'+scopeId);const prior=sessions.get(input.previousSessionId);if(prior?.owner===currentOwner())slots.checkOwner(currentOwner(),'chat:'+(prior.scopeId||input.previousSessionId));
       const id=randomUUID();if(input.previousSessionId&&sessions.get(input.previousSessionId)?.owner===currentOwner())sessions.delete(input.previousSessionId);
       if(sessions.size>=20)sessions.delete(sessions.keys().next().value);
       const restoredCorrections=Array.isArray(data.corrections)?data.corrections.filter(c=>['reality','fiction','identity','chat_time','event_order'].includes(c.type)&&typeof c.text==='string'&&c.text.length<=2000).slice(-20):[];
       const roleRecords=Array.isArray(data.roleRecords)?data.roleRecords.filter(r=>['statement','plan','uncertain'].includes(r.kind)&&typeof r.text==='string'&&r.text.length<=600&&!historyRisk(r.text,background,memories)).slice(-300).map(r=>({sourceId:String(r.sourceId||'').slice(0,120),kind:r.kind,text:r.text})):[];
-      sessions.set(id,{owner:currentOwner(),background,story,history,memories,roleRecords,corrections:restoredCorrections,updated:Date.now()});
+      sessions.set(id,{owner:currentOwner(),scopeId,background,story,history,memories,roleRecords,corrections:restoredCorrections,updated:Date.now()});
       return {sessionId:id,mode:config.mode};
     },
     seen(input) {
@@ -88,7 +89,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       emit({type:'memory',...normalizeChatMemory(response.result,s,message,input.messageId||p.id,p.id)});
       emit({type:'done',requestId:response.requestId});
       return {requestId:response.requestId};
-    }),
+    },'chat:'+(session(input.sessionId).scopeId||input.sessionId)),
     status() { return {maxConcurrent:slots.limit,activeModelTasks:slots.active,storyThinking:config.storyThinking||'disabled',storyMaxCompletionTokens:6000, version:CODE_VERSION,commit:/^[a-f0-9]{40}$/.test(process.env.RENDER_GIT_COMMIT||'')?process.env.RENDER_GIT_COMMIT:null,promptVersion:PROMPT_VERSION,questionPlannerVersion:PLANNER_VERSION,storySelectionEnabled:false,processStartedAt:PROCESS_STARTED_AT, mode: config.mode, site: config.site, model: config.model,  }; },
     story: (input,{signal,onSetting,onDraft,poolState}={}) => exclusive('story', async () => {
       const diagnosticCaseId=takeDiagnosticCase(input.background||{});
@@ -115,7 +116,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       sessions.set(id, { owner:currentOwner(),background: confirmed, story: response.result, corrections: [], memories: [], history: [], updated: Date.now() });
       activeStoryTrace()?.mark('session_ready');
       return { background:confirmed,effectiveSetting:effective, eraContext:selectEra(background,coordinates(background)), story: response.result, sessionId: id, mode: config.mode, requestId: response.requestId };
-    }),
+    },'story:'+(activeStoryTrace()?.record.taskId||randomUUID())),
     chat: (input) => exclusive('chat', async () => {
       const s = session(input.sessionId);
       const message = input.message;

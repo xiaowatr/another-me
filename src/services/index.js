@@ -23,7 +23,7 @@ export const experience = {
   memoryDiagnostic:input=>request('/api/memory/diagnostic',input).catch(()=>{}),
   cancelStory:()=>storyClient.cancel(),
   ackStory:id=>storyClient.ack(id),
-  restore: (snapshot,previousSessionId,signal) => request('/api/session/restore',{snapshot,previousSessionId},signal),
+  restore: (snapshot,previousSessionId,signal,lifeId) => request('/api/session/restore',{snapshot,previousSessionId,lifeId},signal),
   status: () => request('/api/status'),
   getStory: (input,signal,trace,onRetry,onSetting,onRecover) => storyClient.get(input,signal,trace,onSetting,onRecover),
   reply: (input) => request('/api/chat', input),
