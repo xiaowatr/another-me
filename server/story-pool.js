@@ -8,9 +8,9 @@ import {randomUUID} from 'node:crypto';
 import {AppError} from './core.js';
 import {hardStoryIssues} from './story-hard-checks.js';
 import {STORY_MAX_MODEL_CALLS} from '../src/story-budget.js';
-const fatal=e=>['configuration','balance','local_storage','content','stopped'].includes(e.category);
+const fatal=e=>['configuration','balance','local_storage','content','stopped'].includes(e.category)||e.diagnostic?.retryable===false;
 // Generation and optional field repair share the same four-call budget and task slot.
-export async function chooseStoryPool({caller,messages,background,effectiveSetting,signal,onDraft=()=>{},state={generated:0,drafts:[]}}){
+export async function chooseStoryPool({caller,messages,background,effectiveSetting,signal,onDraft=()=>{},state={generated:0,drafts:[]},sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms))}){
  const keep=d=>{state.drafts.push(d);onDraft(d);};
  while(state.generated<STORY_MAX_MODEL_CALLS){
   signal?.throwIfAborted();state.generated++;
@@ -20,7 +20,7 @@ export async function chooseStoryPool({caller,messages,background,effectiveSetti
   try{
    response=await caller.call('story',attemptMessages,{signal,onStart:id=>requestId=id,...(repair?{repairFields:repair.plan.fields,parentRequestId:repair.sourceId}:{}),diagnosticRange:effectiveSetting.temporal?.window,diagnosticClock:effectiveSetting.temporal,validateResult:r=>{if(r.kind==='clarification'&&(repair||!storyRequestInput(messages).canClarify))throw new AppError('invalid_response',502,{stage:'business',reason:'repeated_clarification'});}});
    if(repair){const merged=applyFieldRepair(repair.story,response.result,repair.plan,messages,background,effectiveSetting);response.result=merged.result;issues=merged.issues;originalIdentity=repair.originalIdentity;}
-  }catch(e){if(signal?.aborted||fatal(e))throw e;state.retryFeedback=repair?null:schemaRetryFeedback(e,messages);keep({id:e.requestId||requestId||randomUUID(),sequence:state.generated-1,attemptKind:repair?'field_repair':'generation',...(repair?{repairSourceId:repair.sourceId,repairedFields:repair.plan.fields}:{}),eligible:false,failure:{category:e.category||'network',diagnostic:e.diagnostic||null},payload:null});continue;}
+  }catch(e){if(signal?.aborted||fatal(e))throw e;state.retryFeedback=repair?null:schemaRetryFeedback(e,messages);keep({id:e.requestId||requestId||randomUUID(),sequence:state.generated-1,attemptKind:repair?'field_repair':'generation',...(repair?{repairSourceId:repair.sourceId,repairedFields:repair.plan.fields}:{}),eligible:false,failure:{category:e.category||'network',diagnostic:e.diagnostic||null},payload:null});if(['network','timeout'].includes(e.category)){if(state.generated>=STORY_MAX_MODEL_CALLS)throw e;await sleep(Math.min(3000,state.generated*1000));signal?.throwIfAborted();}continue;}
   if(response.result.kind==='clarification')return response;
   if(!repair){originalIdentity=response.result.identity;response.result=fillStoryMetadata(fillStoryIdentity(fillStoryOpening(response.result),effectiveSetting),storyRequestInput(messages).effectiveSetting);issues=hardStoryIssues(response.result,background,effectiveSetting);}
   state.retryFeedback=hardRetryFeedback(issues,effectiveSetting);

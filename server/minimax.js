@@ -1,3 +1,6 @@
+import {transportError} from './transport-error.js';
+import {plainChatContent} from './chat-content.js';
+import {chatTools,chatToolStream} from './chat-tools.js';
 import {chatEnvelope} from './chat-envelope.js';
 import {fillStoryMetadata} from './story-metadata.js';
 import {storyRequestInput} from './story-request.js';
@@ -26,7 +29,7 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
     if(!['story','chat','memory','questions'].includes(task))throw new AppError('configuration',500);
     let failureOutput=null;
     const model=task==='memory'?(config.memoryModel||'MiniMax-M3'):config.model;const trace=activeStoryTrace();const started = Date.now();
-    const record = { operationId:trace?.record.operationId||null,parentTaskId:trace?.record.parentTaskId||null,attempt:trace?.record.attempt||null,codeVersion:CODE_VERSION,actualModel:null,failureStage:null,failureReason:null,requestedRange:options.diagnosticRange||null, requestId: randomUUID(), time: new Date().toISOString(), task, model, promptVersion: task==='memory'?MEMORY_PROMPT_VERSION:task==='questions'?PLANNER_VERSION:PROMPT_VERSION, durationMs: 0, success: false, errorCategory: null, inputTokens: null, outputTokens: null, totalTokens: null, sent: false, site:config.site, usageSource:null, cachedTokens:null, auditGroup:options.auditGroup || null, status:'pending',parentRequestId:options.parentRequestId||null };
+    const record = { operationId:trace?.record.operationId||options.chatOperationId||null,parentTaskId:trace?.record.parentTaskId||null,attempt:trace?.record.attempt||(task==='chat'?options.chatAttempt:null)||null,codeVersion:CODE_VERSION,actualModel:null,failureStage:null,failureReason:null,requestedRange:options.diagnosticRange||null, requestId: randomUUID(), time: new Date().toISOString(), task, model, promptVersion: task==='memory'?MEMORY_PROMPT_VERSION:task==='questions'?PLANNER_VERSION:PROMPT_VERSION, durationMs: 0, success: false, errorCategory: null, inputTokens: null, outputTokens: null, totalTokens: null, sent: false, site:config.site, usageSource:null, cachedTokens:null, auditGroup:options.auditGroup || null, status:'pending',parentRequestId:options.parentRequestId||null };
     if(task==='memory')record.memoryBatchId=options.memoryBatchId||null;
     let phaseStart=started;record.phaseMs={};const stage=name=>{if(record.stage)record.phaseMs[record.stage]=(record.phaseMs[record.stage]||0)+Date.now()-phaseStart;record.stage=name;phaseStart=Date.now();};
     if(options.diagnosticClock){const c=options.diagnosticClock;record.clock={asOf:/^\d{4}-\d{2}-\d{2}$/.test(c.asOf)?c.asOf:null,startYear:Number.isInteger(c.startYear)?c.startYear:null,startMonth:Number.isInteger(c.startMonth)?c.startMonth:null};}
@@ -48,7 +51,7 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       const response = await fetchImpl(`${config.base}/chat/completions`, {
         method: 'POST', redirect: 'error',
         headers: { 'Authorization': `Bearer ${config.key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, messages, ...(noThinking?{thinking:{type:'disabled'}}:task==='story'?{thinking:{type:config.storyThinking||'disabled'}}:{}), ...(transportTools?{tools:transportTools}:{}), stream: Boolean(options.onText), ...(options.onText ? {stream_options:{include_usage:true}} : {}), reasoning_split: true, temperature: 1, max_completion_tokens: record.maxCompletionTokens }),
+        body: JSON.stringify({ model, messages, ...(noThinking?{thinking:{type:'disabled'}}:task==='story'?{thinking:{type:config.storyThinking||'disabled'}}:{}), ...(transportTools?{tools:transportTools,tool_choice:transportTools.length===1?{type:'function',function:{name:transportTools[0].function.name}}:'required'}:options.chatEnvelope?{tools:chatTools,tool_choice:{type:'function',function:{name:'submit_chat'}}}:{}), stream: Boolean(options.onText), ...(options.onText ? {stream_options:{include_usage:true}} : {}), reasoning_split: true, temperature: 1, max_completion_tokens: record.maxCompletionTokens }),
         signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
       });
       record.httpStatus=response.status;
@@ -56,21 +59,25 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
         stage('stream');
         const envelope=options.chatEnvelope?chatEnvelope(text=>{const safe=textFilterForEnvelope(text);if(safe){if(record.firstBodyMs==null)record.firstBodyMs=Date.now()-started;reply+=safe;if(reply.length>6000)throw new AppError('invalid_response',502);options.onText(safe);}}):null;
         const textFilterForEnvelope=textFilter();
-        const filter=textFilter(); let reply='',finish=null,done=false;
+        const filter=textFilter(); let reply='',finish=null,done=false,contentWire='';
+        const toolStream=options.chatEnvelope?chatToolStream(text=>envelope.push(text)):null;
         for await(const data of readSSE(response.body)){
           if(data==='[DONE]'){done=true;break;}
           let item;try{item=JSON.parse(data);}catch{throw new AppError('invalid_response',502);}
           captureUsage(record,item.usage);if(typeof item.model==='string'&&/^[a-zA-Z0-9_.-]{1,80}$/.test(item.model))record.actualModel=item.model;
           if(item.error || Number(item.base_resp?.status_code || 0)) throw new AppError(classify(response.status,item),502);
           const choice=item.choices?.[0]; if(choice?.finish_reason)finish=choice.finish_reason;
-          if(typeof choice?.delta?.content==='string'){
-            if(options.chatEnvelope){try{envelope.push(choice.delta.content);}catch(e){record.chatEnvelopeShape=envelope.shape();record.chatEnvelopeError=/^chat_envelope_[a-z_]+$/.test(e.message)?e.message:'invalid_json';throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_envelope'});}continue;}
+          if(choice?.delta?.tool_calls&&toolStream){try{toolStream.push(choice.delta.tool_calls);}catch(e){record.chatToolShape=toolStream.shape();throw new AppError('invalid_response',502,{stage:'parse',reason:e.message.startsWith('chat_tool_')?e.message:'chat_envelope'});}}
+          if(typeof choice?.delta?.content==='string'&&choice.delta.content){
+            // Content and tool arguments are independent provider channels. Never concatenate them.
+            // Buffer legacy content until EOF; a later tool call is authoritative.
+            if(options.chatEnvelope){contentWire+=choice.delta.content;if(contentWire.length>18000)throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_content_size'});continue;}
             const text=filter(choice.delta.content);
             if(text){if(record.firstBodyMs==null)record.firstBodyMs=Date.now()-started;reply+=text;if(reply.length>6000)throw new AppError('invalid_response',502);options.onText(text);}
           }
         }
         record.streamShape={doneMarker:done,finish:['stop','length','content_filter','tool_calls'].includes(finish)?finish:'unknown',bodyLength:reply.length};
-        if(finish==='stop'&&envelope){record.chatEnvelopeShape=envelope.shape();let result;try{result=envelope.finish();}catch(e){const reason=String(e.message||'');record.chatEnvelopeError=/^chat_envelope_[a-z_]+$/.test(reason)?reason:reason.startsWith('duplicate_field:')?'duplicate_field':'invalid_json';throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_envelope'});}if(!reply.trim())throw new AppError('invalid_response',502);result.reply=reply;record.streamShape.bodyLength=reply.length;options.validateResult?.(result);record.success=true;return {result,requestId:record.requestId};}
+        if(envelope&&['stop','tool_calls'].includes(finish)){record.chatToolShape=toolStream.shape();if(record.chatToolShape.seen){try{toolStream.finish();}catch(e){throw new AppError('invalid_response',502,{stage:'parse',reason:e.message});}if(finish!=='tool_calls')throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_tool_finish'});record.chatTransport='tool_arguments';record.chatContentShape={length:contentWire.length,ignored:true};}else {if(finish==='tool_calls')throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_tool_missing'});record.chatContentShape={length:contentWire.length,ignored:false};const plain=plainChatContent(contentWire);if(plain){if(options.requireStructuredChat)throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_tool_missing'});const safe=textFilterForEnvelope(plain);if(!safe.trim())throw new AppError('invalid_response',502);reply=safe;if(record.firstBodyMs==null)record.firstBodyMs=Date.now()-started;options.onText(safe);const result={reply,updateType:'none',memoryOperations:[],memoryError:'missing_structured_memory'};record.chatTransport='plain_text';record.chatDegraded=true;record.chatMemoryStatus='failed';record.streamShape.bodyLength=reply.length;options.validateResult?.(result);record.success=true;return {result,requestId:record.requestId};}record.chatTransport='content_json';try{envelope.push(contentWire);}catch(e){record.chatEnvelopeShape=envelope.shape();record.chatEnvelopeError=/^chat_envelope_[a-z_]+$/.test(e.message)?e.message:'invalid_json';throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_envelope'});}}record.chatEnvelopeShape=envelope.shape();let result;try{result=envelope.finish();}catch(e){const reason=String(e.message||'');record.chatEnvelopeError=/^chat_envelope_[a-z_]+$/.test(reason)?reason:reason.startsWith('duplicate_field:')?'duplicate_field':'invalid_json';throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_envelope'});}if(!reply.trim())throw new AppError('invalid_response',502);result.reply=reply;record.streamShape.bodyLength=reply.length;options.validateResult?.(result);record.success=true;return {result,requestId:record.requestId};}
         if(finish!=='stop' || !reply.trim())throw new AppError('invalid_response',502);
         const result={reply,updateType:'none'};options.validateResult?.(result);record.success=true;return {result,requestId:record.requestId};
       }
@@ -119,7 +126,9 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       record.success = true;stage('complete');
       return { result, requestId: record.requestId };
     } catch (error) {
-      const safeError = options.signal?.aborted ? new AppError('stopped') : error instanceof AppError ? error : new AppError(error.name === 'TimeoutError' || error.name === 'AbortError' ? 'timeout' : 'network', 502);
+      const transport=!(error instanceof AppError)?transportError(error):null;
+      if(transport&&!options.signal?.aborted)record.transportError={kind:transport.kind,codes:transport.codes,retryable:transport.retryable};
+      const safeError = options.signal?.aborted ? new AppError('stopped') : error instanceof AppError ? error : new AppError(transport.timedOut?'timeout':'network',502,{stage:record.stage,reason:'transport_'+transport.kind,retryable:transport.retryable});
       record.failureStage=safeError.diagnostic?.stage || record.stage || 'local';
       record.failureReason=safeError.diagnostic?.reason || safeError.category;
       if(task==='story'&&['invalid_response','output_limit'].includes(safeError.category))try{failureEvidence.save(record,failureOutput,config.key);}catch{record.failureEvidenceUnavailable=true;}

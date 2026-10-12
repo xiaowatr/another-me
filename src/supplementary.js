@@ -1,5 +1,5 @@
 import {questionMeaning} from './question-meaning.js';
-import {validSelections} from './question-options.js';
+import {validSelections,reviewedQuestionOptions} from './question-options.js';
 import {activeReusedAnswers,reuseProvenance,activeReuseEntries} from './history-reuse-data.js';
 import {LIFE_BACKGROUND_FIELDS,lifeBackgroundEntries} from './life-background.js';
 import {KEY_QUESTION_BY_ID,validCriticalGap,settingRecord} from './critical-background.js';
@@ -31,11 +31,12 @@ export function validateSupplement(b){
  if(typeof b.supplementary!=='string'||b.supplementary.length>65000)throw Error('supplement_input');
  const e=JSON.parse(b.supplementary);if(!Array.isArray(e.contexts)||e.contexts.length>3)throw Error('supplement_input');
  for(const {key,basis,state:s} of e.contexts){if((basis!=null&&(typeof basis!=='string'||basis.length>32))||typeof key!=='string'||key.length>32||!s||!Array.isArray(s.shown)||s.shown.length>8||new Set(s.shown).size!==s.shown.length||s.shown.some(id=>!QUESTION_BY_ID[id])||!s.answers||typeof s.answers!=='object'||Object.keys(s.answers).some(id=>!s.shown.includes(id))||!Array.isArray(s.confirmations)||s.confirmations.length>2||s.confirmations.some(t=>typeof t!=='string'||t.length>500)||typeof s.extra!=='string'||s.extra.length>500)throw Error('supplement_input');
-  for(const [id,a] of Object.entries(s.answers)){const q=QUESTION_BY_ID[id];if(SCENARIO_BY_ID[id]||!a||!validSelections(q,a.selected)||typeof a.text!=='string'||a.text.length>500||typeof a.skipped!=='boolean')throw Error('supplement_input');}
+  for(const [id,a] of Object.entries(s.answers)){const q=QUESTION_BY_ID[id]&&reviewedQuestionOptions(QUESTION_BY_ID[id],s.questionMeta?.[id]);if(SCENARIO_BY_ID[id]||!a||!validSelections(q,a.selected)||typeof a.text!=='string'||a.text.length>500||typeof a.skipped!=='boolean')throw Error('supplement_input');}
   if(s.confirmationContexts!=null&&(!Array.isArray(s.confirmationContexts)||s.confirmationContexts.length>2||s.confirmationContexts.some(c=>!Number.isInteger(c.sourceIndex)||c.sourceIndex<0||c.sourceIndex>=s.confirmations.length||typeof c.question!=='string'||c.question.length>400||!Array.isArray(c.gapKeys)||c.gapKeys.length>8||c.gapKeys.some(k=>! /^[a-z][a-z0-9_-]{0,47}$/.test(k)))))throw Error('supplement_input');
   if(s.plan?.generationUnknowns!=null&&(!Array.isArray(s.plan.generationUnknowns)||s.plan.generationUnknowns.length>8||s.plan.generationUnknowns.some(q=>!ORDINARY_BY_ID[q?.id]||['question','missingInformation','useInStory'].some(k=>typeof q[k]!=='string'||q[k].length>300))))throw Error('supplement_input');
   if(s.criticalUnknowns!=null&&(!Array.isArray(s.criticalUnknowns)||s.criticalUnknowns.length>8||s.criticalUnknowns.some(g=>!validCriticalGap(g))))throw Error('supplement_input');
   if(s.shown.some(id=>KEY_QUESTION_BY_ID[id]&&(!s.questionMeta?.[id]?.questionText||s.questionMeta[id].questionText.length>180)))throw Error('supplement_input');
+  if(s.questionMeta&&Object.entries(s.questionMeta).some(([id,q])=>q.excludedOptions!=null&&(!Array.isArray(q.excludedOptions)||q.excludedOptions.length>(QUESTION_BY_ID[id]?.options||[]).length||new Set(q.excludedOptions.map(x=>x?.option)).size!==q.excludedOptions.length||q.excludedOptions.some(x=>!x||!QUESTION_BY_ID[id]?.options?.includes(x.option)||typeof x.sourceId!=='string'||x.sourceId.length>100||typeof x.evidence!=='string'||!x.evidence.trim()||x.evidence.length>500))))throw Error('supplement_input');
   if(s.questionMeta&&Object.values(s.questionMeta).some(q=>q.questionText!=null&&(typeof q.questionText!=='string'||q.questionText.length>180)))throw Error('supplement_input');
   if(s.questionMeta&&Object.values(s.questionMeta).some(q=>q.displayedQuestionText!=null&&(typeof q.displayedQuestionText!=='string'||q.displayedQuestionText.length>400)))throw Error('supplement_input');
   if(s.scenario!=null){const q=s.scenario;if(!SCENARIO_BY_ID[q.id]||!s.shown.includes(q.id)||typeof q.answer!=='string'||q.answer.length>500||typeof q.skipped!=='boolean'||typeof q.scopeKey!=='string')throw Error('supplement_input');}

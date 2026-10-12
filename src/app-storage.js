@@ -2,6 +2,6 @@
 export const STORAGE_SCOPE=import.meta.env?.MODE==='local-test'?'local-test':'';
 export function scopedStorage(storage,scope=''){
  const prefix=scope?'another-me.test:'+scope+':':'';
- return {getItem:key=>storage.getItem(prefix+key),setItem:(key,value)=>storage.setItem(prefix+key,value),removeItem:key=>storage.removeItem(prefix+key)};
+ return {keys:()=>typeof storage.key==='function'?Array.from({length:storage.length},(_,i)=>storage.key(i)).filter(k=>k?.startsWith(prefix)).map(k=>k.slice(prefix.length)):[],getItem:key=>storage.getItem(prefix+key),setItem:(key,value)=>storage.setItem(prefix+key,value),removeItem:key=>storage.removeItem(prefix+key)};
 }
 export function appStorage(){const storage=globalThis.localStorage||globalThis.window?.localStorage;if(!storage)throw Error('浏览器无法使用本地存储');return scopedStorage(storage,STORAGE_SCOPE);}

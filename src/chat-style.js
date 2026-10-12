@@ -12,7 +12,7 @@ export function chatStyle(background={},context={},message='',history=[]){
   ...history.filter(m=>m.role==='user').map(m=>({source:'recentUser',text:m.content})).slice(-8),
   {source:'currentUser',text:message}
  ];
- return {communicationSources:sources,mbtiHint:/^[IE][NS][FT][JP]$/.test(background.mbti||'')?background.mbti:null,
+ return {currentReplyRequirements:{source:'currentUser',text:message,rule:'先理解本轮对回复的明确要求，如不反问、简短或限定几句话，并直接落实到reply；问句也是一句，不在完成后额外添问题。没有明确要求反问时，不默认以问题结尾。原话是引语时不误执行；当前要求优先于旧表达习惯。'},communicationSources:sources,mbtiHint:/^[IE][NS][FT][JP]$/.test(background.mbti||'')?background.mbti:null,
  scope:'逐条按完整语境理解交流意愿和表达证据；来源包含事实、偏好、引语，不意味着每项都是对角色的要求。最新明确要求优先，引用别人的话不当本人指令；普通回答保留适用背景。点选不等于用户措辞，MBTI不推断人格或覆盖原话。',
  priority:'本轮明确意愿＞仍适用的已确认偏好和原话＞表达示范。先辨明这句话在问谁的什么、想听什么，再回应；不要按关键词选择语气或道歉对象。'};
 }

@@ -6,7 +6,7 @@ export function relevantAnswer(b){return !b.followupSkipped?b.followupAnswer||''
 export function placementFacts(b){const text=[b.details,relevantAnswer(b)].filter(Boolean).join('。');return [...text.matchAll(/(妻子|丈夫|伴侣|爱人|父亲|母亲)(?:留|待)?在岸上(?:照顾|陪伴|带着)?孩子/g)].map(m=>({subject:m[1],place:'岸上'}));}
 export function placementIssues(text,b){return placementFacts(b).filter(f=>new RegExp(f.subject+'[^。！？]{0,10}(?:随船|上船|跟船|在船上|一起出海)').test(text)&&!new RegExp(f.subject+'[^。！？]{0,8}(?:没|不|未)[^。！？]{0,5}(?:随船|上船|跟船|在船上|出海)').test(text)).map(()=> 'explicit_location_conflict');}
 export function inputConflicts(b){const text=[b.hypotheticalDirection,b.details].join('。'),answer=relevantAnswer(b);const out=[];for(const person of ['妻子','丈夫','伴侣','爱人','父亲','母亲']){const parts=(answer.includes(person)?answer:text).split(/[。！？；]/);const shore=parts.some(s=>new RegExp(person+'[^。！？]{0,10}在岸上').test(s)&&!/(?:不在|没有在)/.test(s));const aboard=parts.some(s=>new RegExp(person+'[^。！？]{0,10}(?:随船|一起出海)').test(s)&&!/(?:不|没|未)[^。！？]{0,5}(?:随船|一起出海)/.test(s));if(shore&&aboard)out.push(person+'是在岸上，还是一起出海');}return out;}
-export function recallTarget(message){return /(?:记得|记住|记忆).{0,10}我|我.{0,10}(?:学了什么|喜欢什么|住在哪|做什么工作)/.test(message)?'realUser':null;}
+export function recallTarget(message){return /(?:记得|记忆).{0,10}我|我.{0,10}(?:学了什么|喜欢什么|住在哪|做什么工作)/.test(message)?'realUser':null;}
 
 export function replacementIssues(text,b){
  if(!/(?:改为我|换成我)/.test(b.hypotheticalDirection||''))return [];

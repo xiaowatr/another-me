@@ -58,7 +58,7 @@ export function parseResult(content, task, diagnostic = {}) {
   catch(e) { throw new AppError('invalid_response', 502, e.diagnostic || {stage:'parse',reason:'json_syntax'}); }
   if (!data || typeof data !== 'object' || Array.isArray(data)) throw new AppError('invalid_response', 502,{stage:'schema',reason:'object_required'});
   if(task==='questions'){if(!Array.isArray(data.questions)||!Array.isArray(data.covered))throw new AppError('invalid_response',502);return data;}
-  if(task==='memory'){if(!Array.isArray(data.operations))throw new AppError('invalid_response',502);return data;}
+  if(task==='memory'){if(data.profile&&typeof data.profile==='object'&&!Array.isArray(data.profile))return data;if(!Array.isArray(data.operations))throw new AppError('invalid_response',502);return data;}
   if (task === 'chat') {
     if (!str(data.reply, 2500) || !['none', 'reality', 'fiction'].includes(data.updateType)) throw new AppError('invalid_response', 502);
     return { reply: data.reply, updateType: data.updateType };

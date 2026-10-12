@@ -17,6 +17,7 @@ export default function MemoryPanel({messages=[],memories,candidates,onCandidate
  {editing===m.id?<><button className="text-button" disabled={disabled||!text.trim()} onClick={()=>{const result=onMemories(memories.map(x=>x.id===m.id?{...x,text:text.trim()}:x));if(!result?.okay){setError('未能保存，请重试。');return;}setEditing(null);onSaved();}}>保存</button><button className="text-button" onClick={()=>setEditing(null)}>取消</button></>:<button className="text-button" disabled={disabled} onClick={()=>{setEditing(m.id);setText(m.text);}}>编辑</button>}
  <button className="text-button memory-delete" disabled={disabled} onClick={()=>onMemories(memories.filter(x=>x.id!==m.id))}>删除</button>
  </div>{source(m)}</article>)}</section>)}
- {!memories.length&&<p className="small">目前还没有保存为记忆的个人事实。聊天回顾与已保存记忆是两回事。结束聊天时会整理你明确说过的事实、偏好和过去经历。</p>}
+ {!memories.length&&<p className="small">此人生没有旧记忆。今后的结束整理会先请你确认，再保存为所有聊天共用的全局记忆。</p>}
  </section>;
 }
+

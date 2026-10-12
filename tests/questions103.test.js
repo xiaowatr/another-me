@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {migrateBackground} from '../src/background.js';
-import {saveSupplement,supplementState,supplementaryContext,validateSupplement,finishSupplementPage} from '../src/supplementary.js';
+import {saveSupplement,supplementState,supplementaryContext,validateSupplement,finishSupplementPage,recordSupplementConfirmation} from '../src/supplementary.js';
 import {normalizePlan,planWithGapCheck} from '../server/supplementary-planner.js';
 import {withoutOptionalAnalysis} from '../src/question-recovery.js';
 import {compileSetting} from '../src/effective-setting.js';
@@ -24,8 +24,10 @@ export function chainCases(){
 }
 test('chain 1: existing evidence prevents another question; facts and exact frequency reach story request',()=>{
  const b=chainCases()[0].background,s=supplementState(b),record=request(b);
- assert.equal(s.plan.questions.length,0);assert.equal(record.criticalBackground[0].status,'answered');
- assert.equal(record.criticalBackground[0].answer.text,'继续是重新捡起');
+ // resolvedBy controls whether to show a question; it cannot manufacture an answer.
+ assert.equal(s.plan.questions.length,0);assert.equal(record.criticalBackground[0].status,'unconfirmed');
+ assert.equal(record.criticalBackground[0].answer,null);
+ assert.ok(record.factsAndConstraints.some(x=>x.id==='details'&&x.text.includes('继续是重新捡起')));
  assert.ok(record.factsAndConstraints.some(x=>x.text.includes('每月两次，遇到困难先自己试')));
  assert.equal(record.parallelAssumption.text,background.hypotheticalDirection);assert.equal(compileSetting(b).clarifications.length,0);
 });
@@ -40,7 +42,9 @@ test('chain 3: skip and review failure preserve unknowns and nondependent genera
  assert.equal(n,4);assert.equal(plan.questions.length,0);assert.equal(plan.optionalAnalysisUnavailable,true);assert.equal(plan.criticalUnknowns[0].key,gap.key);
  const failed=persistPlan(background,plan),restored=saveSupplement(failed,withoutOptionalAnalysis(supplementState(failed)));
  assert.equal(request(restored).criticalBackground[0].status,'analysis_unavailable');assert.equal(compileSetting(restored).clarifications.length,0);
- assert.match(storyMessages(restored)[0].content,/采用不依赖它们的行动与场景/);
+ const messages=storyMessages(restored),core=messages.at(-1);
+ assert.equal(core.role,'system');assert.match(core.content,/若场景必须确定这些背景才能成立，换成无需该前提的当下场景/);
+ assert.equal(messages.filter(x=>x.role==='system'&&x.content.includes('5.1 来源与指定变化')).length,1);
  const skippedWhileLoading=saveSupplement(failed,{...supplementState(failed),plan:{...plan,optionalAnalysisUnavailable:false},skippedRemaining:true});assert.equal(request(skippedWhileLoading).criticalBackground[0].status,'skipped');
  let parsedCalls=0;const partiallyBad=await planWithGapCheck(background,{call:async(t,m,o)=>{parsedCalls++;o.validateResult({...initial([gap]),questions:[{id:'INVALID'}]});throw Error('unreachable');}},{sleep:async()=>{}});assert.equal(parsedCalls,3);assert.equal(partiallyBad.criticalUnknowns[0].key,gap.key);assert.equal(partiallyBad.optionalAnalysisUnavailable,true);
 });
@@ -60,7 +64,14 @@ test('review can keep one grounded temporary question; ungrounded gap and orphan
 test('unclear actor asks only one clarification; an explicit confirmation resolves it; changed sources invalidate stale evidence',()=>{
  const actor={...gap,key:'actor',blocksStory:'actor_or_choice',missingInformation:'谁做出本次选择',questionText:'这次继续学陶艺的是谁？'};
  const b=persistPlan(background,normalizePlan(initial([actor]),background));assert.equal(supplementState(b).plan.questions.length,0);assert.deepEqual(compileSetting(b).clarifications,[actor.questionText]);
- let s=supplementState(b);s.confirmations=['是我自己。'];s.criticalUnknowns=[{...actor,resolvedBy:{sourceId:'confirmation:0',evidence:'是我自己。'}}];const confirmed=saveSupplement(b,s);assert.equal(compileSetting(confirmed).clarifications.length,0);
- s.confirmations=[];assert.equal(request(saveSupplement(b,s)).criticalBackground[0].status,'unasked');
+ let s=supplementState(b);
+ // A model-linked quote alone is still not a confirmation of this question.
+ const unlinked=saveSupplement(b,{...s,confirmations:['是我自己。'],criticalUnknowns:[{...actor,resolvedBy:{sourceId:'confirmation:0',evidence:'是我自己。'}}]});
+ assert.deepEqual(compileSetting(unlinked).clarifications,[actor.questionText]);assert.equal(request(unlinked).criticalBackground[0].status,'unconfirmed');
+ s=recordSupplementConfirmation(s,'是我自己。');
+ const confirmed=saveSupplement(b,s);validateSupplement(confirmed);assert.equal(compileSetting(confirmed).clarifications.length,0);
+ assert.equal(request(confirmed).criticalBackground[0].status,'answered');assert.equal(request(confirmed).criticalBackground[0].answer.text,'是我自己。');
+ const unrelated=saveSupplement(b,{...s,confirmationContexts:s.confirmationContexts.map(x=>({...x,question:'另一个问题'}))});assert.deepEqual(compileSetting(unrelated).clarifications,[actor.questionText]);
+ s={...s,confirmations:[],confirmationContexts:[]};assert.equal(request(saveSupplement(b,s)).criticalBackground[0].status,'unasked');
  const changed={...b,hypotheticalDirection:'如果换一个爱好。'};assert.equal(request(changed).criticalBackground.length,0);
 });

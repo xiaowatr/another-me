@@ -8,8 +8,9 @@ export function receiveStructured(content,task,tools,messages,diagnostic={}){
  if(task==='story'&&data?.kind==='story'){const normalize=(object,key,path)=>{if(typeof object?.[key]!=='string')return;const text=object[key].replace(/\\r\\n|\\n|\\r/g,'\n');if(text!==object[key]){object[key]=text;repairs.push({field:path,operation:'normalize_literal_newline'});}};for(const k of ['intro','character','opening'])normalize(data,k,'/'+k);for(const k of ['chapter1','chapter2','chapter3','chapter4'])normalize(data[k],'text','/'+k+'/text');}
  // The optional null-only fourth slot has no story content when it is an empty string.
  // Omit that slot, record compatibility handling, then validate the same original schema.
- // Nonempty strings, objects, missing required chapters and partial-repair extras remain invalid.
- if(schema?.properties?.chapter4?.type==='null'&&!schema.required?.includes('chapter4')&&typeof data?.chapter4==='string'&&!data.chapter4.trim()){
+ // The provider also encodes an empty null slot as the exact object {null:""}.
+ // All content-bearing strings/objects, missing chapters and partial-repair extras remain invalid.
+ if(schema?.properties?.chapter4?.type==='null'&&!schema.required?.includes('chapter4')&&((typeof data?.chapter4==='string'&&!data.chapter4.trim())||(data?.chapter4&&typeof data.chapter4==='object'&&!Array.isArray(data.chapter4)&&Object.keys(data.chapter4).length===1&&data.chapter4.null===''))){
   const {chapter4,...rest}=data;data=rest;repairs.push({field:'/chapter4',operation:'omit_empty_optional_slot',original:chapter4});
  }
  return {data,errors:tool?validateSchema(schema,data):[{path:'',keyword:'allowed_tool'}],repairs};

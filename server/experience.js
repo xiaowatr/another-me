@@ -1,3 +1,5 @@
+import {validateUserProfile} from './user-profile.js';
+import {callChatWithRetry} from './chat-retry.js';
 import {normalizeChatMemory} from './chat-memory.js';
 import {chooseStoryPool} from './story-pool.js';
 import {directBeijingReply} from './realtime-context.js';
@@ -43,7 +45,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
     questions:input=>questionTasks(currentOwner(),validateBackground(migrateBackground(input.background))),
     availability:()=>slots.availability(currentOwner()),
     checkAvailable:owner=>slots.check(owner,'story-admission'),
-    memory:(data,batchId)=>exclusive('memory',async()=>{const response=await caller.call('memory',memoryMessages(data),{memoryBatchId:batchId,validateResult:r=>normalizeMemoryResult(r,data,batchId)});return {...normalizeMemoryResult(response.result,data,batchId),requestId:response.requestId};},'memory:'+batchId),
+    memory:(data,batchId)=>exclusive('memory',async()=>{if(config.mode==='demo'&&data.globalProfile)return normalizeMemoryResult({operations:[],profile:data.globalProfile},data,batchId);const response=await caller.call('memory',memoryMessages(data),{memoryBatchId:batchId,validateResult:r=>normalizeMemoryResult(r,data,batchId)});return {...normalizeMemoryResult(response.result,data,batchId),requestId:response.requestId};},'memory:'+batchId),
     restore(input){
       // Restoring one browser never blocks an unrelated browser.
       
@@ -58,7 +60,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       if(sessions.size>=20)sessions.delete(sessions.keys().next().value);
       const restoredCorrections=Array.isArray(data.corrections)?data.corrections.filter(c=>['reality','fiction','identity','chat_time','event_order'].includes(c.type)&&typeof c.text==='string'&&c.text.length<=2000).slice(-20):[];
       const roleRecords=Array.isArray(data.roleRecords)?data.roleRecords.filter(r=>['statement','plan','uncertain'].includes(r.kind)&&typeof r.text==='string'&&r.text.length<=600&&!historyRisk(r.text,background,memories)).slice(-300).map(r=>({sourceId:String(r.sourceId||'').slice(0,120),kind:r.kind,text:r.text})):[];
-      sessions.set(id,{owner:currentOwner(),scopeId,background,story,history,memories,roleRecords,corrections:restoredCorrections,updated:Date.now()});
+      sessions.set(id,{globalProfile:data.globalProfile?validateUserProfile(data.globalProfile):null,owner:currentOwner(),scopeId,background,story,history,memories,roleRecords,corrections:restoredCorrections,updated:Date.now()});
       return {sessionId:id,mode:config.mode};
     },
     seen(input) {
@@ -72,6 +74,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
     },
     chatStream: (input,emit,signal) => exclusive('chat',async()=>{
       const s=session(input.sessionId),message=input.message?.trim(),intent=input.intent || 'chat';
+      if(input.globalProfile)s.globalProfile=validateUserProfile(input.globalProfile);
       if(!message || message.length>2000 || !['chat','reality','fiction'].includes(intent))throw new AppError('input');
       if(s.corrections.length>=20)throw new AppError('memory_full');
       const controller=new AbortController();
@@ -83,7 +86,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       const forward=text=>{text=qualifyCurrentAge(rolePresentation(readableText(text),s.background),s.background,s.story);const risks=inspectFactText(text,s.background,{memories:s.memories,anchorYear:storyClock(s.background,s.story).year});if(risks.length)throw new AppError('background_conflict',422,{stage:'business',reason:risks[0]});checkChatGrounding(text,s.background,s.memories || [],JSON.stringify({story:s.story,roleRecords:s.roleRecords,fiction:s.memories.filter(m=>m.type==='fiction')}),recallTarget(message));p.text+=text;emit({type:'text',text});};
       const onText=text=>{buffered+=text;let match;while((match=/[。！？!?\n]/.exec(buffered))){const end=match.index+1;const sentence=buffered.slice(0,end);buffered=buffered.slice(end);forward(sentence);}};
       const clockReply=intent==='chat'?directBeijingReply(message):null;
-      const response=clockReply?{result:{reply:clockReply}}:config.mode==='demo'?{result:{reply:await demoProvider.reply({turn:s.history.length/2})}}:await caller.call('chat',streamingChatMessages(s,message,intent,new Date(),input.messageId||p.id),{onText,chatEnvelope:true,validateResult:()=>{if(buffered){forward(buffered);buffered='';}},onStart:requestId=>emit({type:'request',requestId}),signal:AbortSignal.any([signal,controller.signal])});
+      const response=clockReply?{result:{reply:clockReply}}:config.mode==='demo'?{result:{reply:await demoProvider.reply({turn:s.history.length/2})}}:await callChatWithRetry(caller,streamingChatMessages(s,message,intent,new Date(),input.messageId||p.id),{onText,chatEnvelope:true,chatOperationId:p.id,validateResult:()=>{if(buffered){forward(buffered);buffered='';}},onStart:requestId=>emit({type:'request',requestId}),signal:AbortSignal.any([signal,controller.signal])});
       if(clockReply||config.mode==='demo')onText(response.result.reply);
       if(buffered)forward(buffered);
       emit({type:'memory',...normalizeChatMemory(response.result,s,message,input.messageId||p.id,p.id)});
