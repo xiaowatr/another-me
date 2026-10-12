@@ -5,10 +5,12 @@ import {eventDate} from './age-validation.js';
 export function timeAnchors(b,now=new Date()){
  const sources=['hypotheticalDirection','realityOutcome','details'].flatMap(field=>dateParts(b[field]).map(d=>({...d,field,source:b[field]})));
  const eventSources=sources.filter(d=>!/(?:观察|只看|只写)[：:]?\s*$/.test(d.source.slice(0,d.source.indexOf(d.text))));
- const start=eventSources.find(d=>d.field==='hypotheticalDirection')||eventSources.find(d=>d.field==='realityOutcome')||(/^\d{4}$/.test(b.birthYear||'')&&/^\d{1,3}$/.test(b.forkAge||'')?{year:+b.birthYear+ +b.forkAge,month:null,estimated:true}:null);
+ const clarified=startClarification(b);if(clarified)sources.push(clarified);
+ const start=clarified||eventSources.find(d=>d.field==='hypotheticalDirection')||eventSources.find(d=>d.field==='realityOutcome')||(/^\d{4}$/.test(b.birthYear||'')&&/^\d{1,3}$/.test(b.forkAge||'')?{year:+b.birthYear+ +b.forkAge,month:null,estimated:true}:null);
  const window=observationWindow(b,start,now);
  return {window,start,sources,asOf:now.toISOString().slice(0,10),currentYear:now.getFullYear(),currentMonth:now.getMonth()+1,observationRange:(b.hypotheticalDirection||'').match(/(?:只写|只看|仅写|仅看)([^。；]+)/)?.[1]||explicitDuration(b.hypotheticalDirection)?.text||null};
 }
+export function startClarification(b){if(b.followupKey!=='hard-conflict'||b.followupSkipped)return null;const answer=String(b.followupAnswer||'').trim();const m=answer.match(/^从(?:未来设想(?:中)?|故事中(?:的)?|故事里的)?((?:18|19|20|21)\d{2})年(?:(\d{1,2})月(?:(\d{1,2})日)?)?[^，,。；！？\n]{0,40}(?:开始|起)/);if(!m||m[2]&&(+m[2]<1||+m[2]>12))return null;const explicit=dateParts(b.hypotheticalDirection)[0];if(explicit&&explicit.year!==+m[1])return null;return {year:+m[1],month:m[2]?+m[2]:null,...(m[3]?{day:+m[3]}:{}),field:'followupAnswer',source:answer,text:answer};}
 export function futureScenario(b,a=timeAnchors(b)){const start=a.start,year=a.currentYear||Number(a.asOf?.slice(0,4)),month=a.currentMonth||Number(a.asOf?.slice(5,7));return Boolean(start&&(start.year>year||start.year===year&&start.month>month)||!start&&/未来.*(?:设想|探索|可能)|从现在起未来/.test(b.hypotheticalDirection||''));}
 export function scenePhase(scene,b){const a=timeAnchors(b),d=dateParts(scene.time)[0];if(/回忆|此前|回顾/.test(scene.time||''))return 'memory';if(!d&&futureScenario(b,a))return 'future';return /未来|设想|可能情景|计划/.test(scene.time||'')||d&&(d.year>a.currentYear||d.year===a.currentYear&&d.month>a.currentMonth)?'future':/回忆|此前|回顾/.test(scene.time||'')?'memory':'past';}
 export function temporalIssues(story,b,compiledTemporal){const a=compiledTemporal||timeAnchors(b),out=[];
@@ -85,12 +87,13 @@ export function observationWindow(b,fork,now=new Date()){
  const sources=['hypotheticalDirection','details','followupAnswer'].filter(f=>f!=='followupAnswer'||!b.followupSkipped).flatMap(field=>String(b[field]||'').split(/[。；\n]/).flatMap(text=>{
  const normalized=text.replace(/半年/g,'六个月');const m=normalized.match(/(?:未来|接下来|之后|随后|以后|只写|只看|仅写|仅看|观察|从现在起|从今天起|从当年|从那次|从(?:19|20)\d{2}年)[^。；]{0,35}?([0-9一二两三四五六七八九十]+)个月/);
  // Duration of the imagined stay; never reinterpret a stated past stay as this window.
- const stay=!/(?:现实|过去|曾经|以前)/.test(text)&&(field==='hypotheticalDirection'||/(?:驻留|停留|旅居)/.test(b.hypotheticalDirection||''))?(normalized.match(/(?:驻留|停留|旅居)([0-9一二两三四五六七八九十]+)个月/)||normalized.match(/([0-9一二两三四五六七八九十]+)个月[^。；，,]{0,8}(?:驻留|停留|旅居)/)):null;
+ const stay=!/(?:现实|过去|曾经|以前)/.test(text)&&(field==='hypotheticalDirection'||/(?:驻留|停留|旅居|独住)/.test(b.hypotheticalDirection||''))?(normalized.match(/(?:驻留|停留|旅居|独住)([0-9一二两三四五六七八九十]+)个月/)||normalized.match(/([0-9一二两三四五六七八九十]+)个月[^。；，,]{0,8}(?:驻留|停留|旅居|独住)/)):null;
  return m||stay?[{field,text,months:smallNumber((m||stay)[1]),...(stay?{scenarioDuration:true}:{})}]:[];
  }));
  const duration=explicitDuration(b.hypotheticalDirection);if(duration&&!sources.length)sources.push({field:'hypotheticalDirection',text:duration.text,months:duration.months,scenarioDuration:true});
  if(!sources.length)return null;const item=sources.at(-1);if(!item.months)return null;
- const explicitNow=/从现在|从今天/.test(item.text),explicitFork=Boolean(item.scenarioDuration)||/从当年|从那年|从那次|分[岔叉].{0,8}起|从(?:19|20)\d{2}年|接下来|之后|随后|以后/.test(item.text),future=/未来/.test(item.text);
+ const datedFuture=item.field==='hypotheticalDirection'&&fork&&fork.year>now.getFullYear()&&dateParts(item.text).some(d=>d.year===fork.year);
+ const explicitNow=!startClarification(b)&&/从现在|从今天/.test(item.text),explicitFork=Boolean(startClarification(b)||item.scenarioDuration||datedFuture)||/从当年|从那年|从那次|分[岔叉].{0,8}起|从(?:19|20)\d{2}年|接下来|之后|随后|以后/.test(item.text),future=/未来/.test(item.text);
  const current={year:now.getFullYear(),month:now.getMonth()+1,day:now.getDate()};
  const different=fork&&(fork.year!==current.year||fork.month&&fork.month!==current.month);
  const anchor=explicitNow?'now':explicitFork?'fork':future&&different?'ambiguous':future?'now':'fork';

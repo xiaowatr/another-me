@@ -1,5 +1,6 @@
+import {storageFailureText} from './storage-recovery.js';
 import GlobalMemoryDialog from './GlobalMemoryDialog.jsx';
-import {readGlobalMemory,saveGlobalMemory,readProfileReview,writeProfileReview,clearProfileReview,profileInput,emptyProfile} from './global-memory.js';
+import {readGlobalMemory,saveGlobalMemory,readProfileReview,writeProfileReview,clearProfileReview,profileInput,emptyProfile,reviewProfile,adoptProfileSuggestion,saveGlobalMemoryLocked} from './global-memory.js';
 import {acceptChatMemory} from './chat-memory.js';
 import HistoryReuseDialog from './HistoryReuseDialog.jsx';
 import {readHistoryReuse,reuseApplicable,protectReuseOnEdit} from './history-reuse-data.js';
@@ -62,14 +63,16 @@ function App() {
   const [lifeId,setLifeId]=useState(initialLife?.id || null);
   const [memories,setMemories]=useState(initialLife?.memories || []);
   const [freshStoryId,setFreshStoryId]=useState(null);
-  const [profileReview,setProfileReview]=useState(()=>initialLife?readProfileReview(draftStorage(),initialLife.id):null),[profileWorking,setProfileWorking]=useState(false),[profileError,setProfileError]=useState('');
+  const [profileReview,setProfileReview]=useState(()=>initialLife?readProfileReview(draftStorage(),initialLife.id):null),[profileWorking,setProfileWorking]=useState(false),[profileError,setProfileError]=useState(''),[profileSaving,setProfileSaving]=useState(false);
   const leaveAction=useRef(null),profileVisible=useRef(Boolean(profileReview)),profileJobs=useRef(new Set());
   useEffect(()=>{if(profileReview&&!profileReview.ready)setProfileError('上次离开时尚未完成整理，可点击重新整理。');},[]);
   function openGlobalMemory(){const base=readGlobalMemory(draftStorage());profileVisible.current=true;setProfileError('');setProfileReview({lifeId:null,base,draft:base,ready:true});}
   function leaveChat(action){if(page!=='chat'){action();return;}leaveAction.current=action;endChat();}
   function laterProfile(){profileVisible.current=false;setProfileReview(null);setProfileError('');const action=leaveAction.current;leaveAction.current=null;action?.();}
-  function confirmProfile(){const r=profileReview;if(!r?.ready)return;saveGlobalMemory(draftStorage(),r.base,r.draft);if(r.lifeId){const saved=mutateLife(r.lifeId,l=>({...l,sessionMeta:{...l.sessionMeta,globalOrganizedUntil:Math.max(l.sessionMeta?.globalOrganizedUntil||0,r.input.end)}}));if(saved?.okay)clearProfileReview(draftStorage(),r.lifeId);}setSavedNotice('全局记忆已保存，所有人生聊天都可使用');laterProfile();}
-  function changeProfile(draft){const r={...profileReview,draft};setProfileReview(r);try{if(r.lifeId)writeProfileReview(draftStorage(),r.lifeId,r);setProfileError('');}catch{setProfileError('草稿暂未保存，请保留页面，稍后重试编辑。');}}
+  async function confirmProfile(keep=false){const r=profileReview;if(!r?.ready||profileSaving)return;if(r.empty&&!keep)throw Error('profile_empty');setProfileSaving(true);try{if(!keep)await saveGlobalMemoryLocked(draftStorage(),r.base,r.draft);if(r.lifeId){const saved=mutateLife(r.lifeId,l=>({...l,sessionMeta:{...l.sessionMeta,globalOrganizedUntil:Math.max(l.sessionMeta?.globalOrganizedUntil||0,r.input.end)}}),{rebaseChat:true});if(saved?.okay)clearProfileReview(draftStorage(),r.lifeId);}setSavedNotice(keep?'已保持原记忆，聊天仍保留':'全局记忆已保存，所有人生聊天都可使用');laterProfile();}finally{setProfileSaving(false);}}
+  function retryProfile(){const r={...profileReview,ready:false,error:'invalid_response'};if(r.lifeId)writeProfileReview(draftStorage(),r.lifeId,r);setProfileReview(r);endChat();}
+  function adoptProfile(field){const r=adoptProfileSuggestion(profileReview,field);setProfileReview(r);try{if(r.lifeId)writeProfileReview(draftStorage(),r.lifeId,r);setProfileError('');}catch{setProfileError('草稿暂未保存，请保留页面。');}}
+  function changeProfile(draft){const r={...profileReview,draft,empty:false,manuallyEdited:true,changes:(profileReview.changes||[]).filter(k=>profileReview.draft[k]===draft[k])};setProfileReview(r);try{if(r.lifeId)writeProfileReview(draftStorage(),r.lifeId,r);setProfileError('');}catch{setProfileError('草稿暂未保存，请保留页面，稍后重试编辑。');}}
 
   const [storyInfoOpen,setStoryInfoOpen]=useState(false);
   const [aboutOpen,setAboutOpen]=useState(false),[savedNotice,setSavedNotice]=useState('');
@@ -79,7 +82,8 @@ function App() {
   const [sessionMeta,setSessionMeta]=useState({...emptyReview(),...initialLife?.sessionMeta});
   const [editingProfile,setEditingProfile]=useState(false),[wrapWorkingId,setWrapWorkingId]=useState(null);
   const reviewJobs=useRef(new Set()),live=useRef(null),libraryRef=useRef(library);
-  const [lifeStorageOkay,setLifeStorageOkay]=useState(true);
+  const [lifeStorageOkay,setLifeStorageOkay]=useState(true),[lifeStorageError,setLifeStorageError]=useState('');
+  function exportChatBackup(){const data=JSON.stringify({version:1,life:live.current},null,2),url=URL.createObjectURL(new Blob([data],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download='another-me-unsaved-chat.json';a.click();URL.revokeObjectURL(url);}
   const storyDisplayTiming=useRef(null);
   const generation=useRef(null),followBottom=useRef(true),historicMessages=useRef(new Set(initialLife?.messages.map(m=>m.id)||[]));
   const messagesBox=useRef(null),chatPositions=useRef(new Map());
@@ -123,14 +127,14 @@ function App() {
     const life={...library.find(l=>l.id===lifeId),conversationContext:lifeContext(generatedBackground,story,memories),chatTime:chatClock(generatedBackground,undefined,story),id:lifeId,name:lifeName,story,background:generatedBackground,messages,draft,memories,candidates,contextStart,eraContext,mode:storyMode,sessionMeta};
     setLibrary(prev=>[...prev.filter(l=>l.id!==lifeId),life]);
   },[lifeName,lifeId,story,generatedBackground,messages,draft,memories,candidates,contextStart,eraContext,storyMode,sessionMeta]);
-  useEffect(()=>{const okay=writeLives(draftStorage(),{activeId:lifeId,lives:library},{changedIds:lifeId?[lifeId]:[]});setLifeStorageOkay(okay);if(okay&&library.some(l=>l.id===lifeId))experience.ackStory(lifeId);},[library,lifeId]);
+  useEffect(()=>{const okay=writeLives(draftStorage(),{activeId:lifeId,lives:library},{changedIds:lifeId?[lifeId]:[],passive:true});setLifeStorageOkay(okay);setLifeStorageError(okay?'':storageFailureText());if(okay&&library.some(l=>l.id===lifeId))experience.ackStory(lifeId);},[library,lifeId]);
   function switchLife(id,destination='chat',skip=false){if(page==='chat'&&skip!==true){leaveChat(()=>switchLife(id,destination,true));return;}if(requestLock.current)return;const found=readLives(draftStorage()).lives.find(l=>l.id===id)||library.find(l=>l.id===id);if(!found)return;const life={...found,lastVisitedAt:new Date().toISOString()};setLibrary(prev=>prev.map(l=>l.id===id?life:l));historicMessages.current=new Set(life.messages.map(m=>m.id));
     setSavedNotice('');setLifeId(id);setLifeName(archiveName(life));setStory(life.story);setGeneratedBackground(life.background);setMessages(life.messages);setDraft(life.draft || '');setMemories(life.memories || []);setCandidates(life.candidates || []);setContextStart(life.contextStart || 0);setEraContext(life.eraContext || []);setStoryMode(life.mode);setSessionId(null);setError('');setTiming(null);setSyncFailed(false);setSessionMeta({...emptyReview(),...life.sessionMeta});setEditingProfile(false);setAboutOpen(destination==='about');setPage(destination==='life'?'life':'chat');const review=readProfileReview(draftStorage(),id);if(review){profileVisible.current=true;setProfileReview(review);setProfileError(review.ready?'':'上次尚未整理，可点击重新整理。');}
   }
   function renameLife(id,name){const latest=readLives(draftStorage()).lives.find(l=>l.id===id);const renamed=libraryRef.current.map(l=>l.id===id?{...(latest||l),name}:l);if(!writeLives(draftStorage(),{activeId:lifeId,lives:renamed},{changedIds:[id]})){setError('暂时无法保存名称，请保留当前页面。');return;}setLibrary(prev=>prev.map(l=>l.id===id?{...l,name}:l));if(id===lifeId)setLifeName(name);}
   const liveForm=useRef(background);liveForm.current=background;
   const followup=hardQuestion(background)||(['model','hard-conflict'].includes(background.followupKey)?{question:background.followupQuestion,options:[]}:null);
-  function mutateLife(id,transform){const current=live.current?.id===id?live.current:libraryRef.current.find(l=>l.id===id);if(!current)return;const {next,lives:all,okay}=persistLifeChange(draftStorage(),libraryRef.current,live.current?.id,id,current,transform);setLifeStorageOkay(okay);if(!okay){setError('暂时无法保存，请保留当前页面。');return {next:current,okay:false};}libraryRef.current=all;setLibrary(all);if(live.current?.id===id){live.current=next;setMessages(next.messages);setMemories(next.memories);setCandidates(next.candidates);setContextStart(next.contextStart||0);setSessionMeta(next.sessionMeta||emptyReview());}return {next,okay};}
+  function mutateLife(id,transform,options={}){const current=live.current?.id===id?live.current:libraryRef.current.find(l=>l.id===id);if(!current)return;const {next,lives:all,okay}=persistLifeChange(draftStorage(),libraryRef.current,live.current?.id,id,current,transform,options);setLifeStorageOkay(okay);setLifeStorageError(okay?'':storageFailureText());if(!okay){setError(storageFailureText());return {next:current,okay:false};}libraryRef.current=all;setLibrary(all);if(live.current?.id===id){live.current=next;setMessages(next.messages);setMemories(next.memories);setCandidates(next.candidates);setContextStart(next.contextStart||0);setSessionMeta(next.sessionMeta||emptyReview());}return {next,okay};}
   function changeMemories(next){return mutateLife(lifeId,l=>reviseMemories(l,next));}
   function changeCandidates(next){return mutateLife(lifeId,l=>dismissCandidates(l,next));}
   function returnLives(skip=false){if(page==='chat'&&skip!==true){leaveChat(()=>returnLives(true));return;}const saved=readLives(draftStorage()).lives;setLibrary([...saved.filter(l=>l.id!==live.current?.id),...(live.current?.id?[live.current]:[])]);setEditingProfile(false);setAboutOpen(false);setPage('lives');}
@@ -139,15 +143,15 @@ function App() {
   async function endChat(){const id=profileReview?.lifeId||lifeId;if(!id||profileJobs.current.has(id))return;profileJobs.current.add(id);setProfileWorking(true);setProfileError('');setAboutOpen(false);profileVisible.current=true;
     let review;
     try{const t=activeTurn.current;if(t){await stopReply();await t.finished;await new Promise(r=>setTimeout(r,0));}
-      const saved=mutateLife(id,l=>retainConversationSummary(l));if(!saved?.okay)throw Error('profile_storage');
+      const saved=mutateLife(id,l=>retainConversationSummary(l),{rebaseChat:true});if(!saved?.okay)throw Error('profile_storage');
       review=readProfileReview(draftStorage(),id);const base=readGlobalMemory(draftStorage());
       if(!review){const input=profileInput(saved.next,base);review={lifeId:id,base,draft:base,input,ready:!input.messages.length,calls:0};}
       setProfileReview(review);writeProfileReview(draftStorage(),id,review);
       if(review.ready)return;
       const state=await experience.status(),resume=review.batchId&&review.instanceId===state.instanceId&&!review.error;if(!resume&&review.calls>=2)throw Error('profile_retry_exhausted');const retry=review.error==='invalid_response'&&review.instanceId===state.instanceId;review={...review,error:null,calls:(review.calls||0)+(resume?0:1),attempt:retry?1:0,batchId:resume||retry?review.batchId:crypto.randomUUID(),instanceId:state.instanceId};writeProfileReview(draftStorage(),id,review);
       const result=await experience.extractMemory({batchId:review.batchId,instanceId:state.instanceId,data:review.input,attempt:review.attempt});
-      review={...review,draft:result.profile,ready:true};writeProfileReview(draftStorage(),id,review);if(profileVisible.current)setProfileReview(review);
-    }catch(e){if(review){review={...review,error:e.category||'local'};try{writeProfileReview(draftStorage(),id,review);}catch{}}if(profileVisible.current)setProfileError(e.message==='profile_retry_exhausted'?'这批聊天已尝试两次，请保留原话和草稿，稍后手动编辑全局记忆。':'聊天已保存，整理未完成；可以稍后确认或重新整理。');}
+      review={...review,...reviewProfile(review.base,result.profile),ready:true};writeProfileReview(draftStorage(),id,review);if(profileVisible.current)setProfileReview(review);
+    }catch(e){if(review){review={...review,error:e.category||'local'};try{writeProfileReview(draftStorage(),id,review);}catch{}}if(profileVisible.current)setProfileError(e.message==='profile_storage'?storageFailureText():e.message==='profile_retry_exhausted'?'这批聊天已尝试两次，请保留原话和草稿，稍后手动编辑全局记忆。':'聊天已保存，整理未完成；可以稍后确认或重新整理。');}
     finally{profileJobs.current.delete(id);setProfileWorking(false);}
   }
   function saveSelected(ids){try{mutateLife(lifeId,l=>completeReview(l,ids));returnLives();}catch{setError('记忆已满，请先在关于我中整理已有内容。');}}
@@ -266,7 +270,7 @@ function App() {
   const notice = status?.mode==='real' ? null : <div className="notice"><span className="dot"/>{!status ? '正在检查本地服务……' : demo ? '演示模式 · 尚未配置密钥，故事与回复均为固定示例，不会根据输入生成。' : status.mode === 'configuration' ? '本地模型配置需要检查，请修正配置后重启。' : ''}</div>;
   return <div className={`app-shell ${page==='chat'?'in-chat':''}`}><fieldset className="app-fieldset" disabled={false}>
     <header className="site-header"><button className="brand" onClick={() => navigate('home')} aria-label="another me 首页"><span className="brand-symbol" aria-hidden="true">✉</span> another me<span className="brand-cn">平行人生邮局</span></button><button type="button" className="text-button header-lives-entry" disabled={busy} onClick={returnLives}>历史记录</button><span className="header-note">另一种人生的来信</span>{status?.mode !== 'real' && <span className="demo-pill">{status?.mode === 'demo' ? '体验原型 / 演示' : '连接检查'}</span>}</header>
-    <main>{profileReview&&<GlobalMemoryDialog review={profileReview} demo={status?.mode==='demo'} working={profileWorking} error={profileError} onChange={changeProfile} onSave={confirmProfile} onLater={laterProfile} onRetry={endChat}/>} {supplementOpen&&<SupplementaryQuestions background={background} onChange={b=>{liveForm.current=b;setBackground(b);}} onClose={()=>setSupplementOpen(false)} onGenerate={b=>{setSupplementOpen(false);next({preventDefault(){}},true,null,b);}}/>}{page==='chat'&&<button type="button" className="text-button lives-entry" disabled={busy} onClick={()=>navigate('life')}>← 故事与背景</button>}{page==='lives'&&<LifeHome library={library} onHome={()=>navigate('home')} onOpen={switchLife} onNew={newLife} onDelete={deleteLife} onRename={renameLife} notice={savedNotice}/>} {page==='wrap'&&error&&<p role="alert" className="error">{error}</p>}{page==='wrap'&&lifeId&&<WrapUp savedOkay={lifeStorageOkay} life={live.current} working={wrapWorkingId===lifeId} onCandidates={changeCandidates} onSave={saveSelected} onReturn={returnLives} onRetry={endChat}/>} {!lifeStorageOkay && <p className="error" role="alert">浏览器空间不足或不允许存储，当前人生未能保存。请勿关闭页面。</p>}
+    <main>{profileReview&&<GlobalMemoryDialog review={profileReview} demo={status?.mode==='demo'} working={profileWorking||profileSaving} saving={profileSaving} error={profileError} onChange={changeProfile} onSave={()=>confirmProfile(false)} onAdopt={adoptProfile} onKeep={()=>confirmProfile(true)} onLater={laterProfile} onRetry={retryProfile}/>} {supplementOpen&&<SupplementaryQuestions background={background} onChange={b=>{liveForm.current=b;setBackground(b);}} onClose={()=>setSupplementOpen(false)} onGenerate={b=>{setSupplementOpen(false);next({preventDefault(){}},true,null,b);}}/>}{page==='chat'&&<button type="button" className="text-button lives-entry" disabled={busy} onClick={()=>navigate('life')}>← 故事与背景</button>}{page==='lives'&&<LifeHome library={library} onHome={()=>navigate('home')} onOpen={switchLife} onNew={newLife} onDelete={deleteLife} onRename={renameLife} notice={savedNotice}/>} {page==='wrap'&&error&&<p role="alert" className="error">{error}</p>}{page==='wrap'&&lifeId&&<WrapUp savedOkay={lifeStorageOkay} life={live.current} working={wrapWorkingId===lifeId} onCandidates={changeCandidates} onSave={saveSelected} onReturn={returnLives} onRetry={endChat}/>} {!lifeStorageOkay && <div className="error" role="alert"><p>{lifeStorageError||'本地保存未完成，请保留页面。'}</p><button className="text-button" onClick={exportChatBackup}>导出当前聊天备份</button></div>}
       {!status && error && <div className="error" role="alert">{error} <button onClick={refreshStatus} className="text-button">重新连接</button></div>}
       {page === 'home' && <>
         <div className="hero">
@@ -306,6 +310,10 @@ function App() {
   </fieldset></div>;
 }
 createRoot(document.getElementById('root')).render(<App/>);
+
+
+
+
 
 
 

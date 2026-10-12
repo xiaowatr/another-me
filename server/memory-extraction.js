@@ -1,8 +1,9 @@
 import {userProfileMessages,normalizeUserProfile,validateUserProfile} from './user-profile.js';
+import {PROFILE_FIELDS} from '../src/global-memory.js';
 import {participantIdentity,PARTICIPANT_RULES,isIdentityCorrection,inventedRelationship} from '../src/participant-identity.js';
 import {createHash} from 'node:crypto';
 import {AppError} from './core.js';
-export const MEMORY_PROMPT_VERSION='memory-v11';
+export const MEMORY_PROMPT_VERSION='memory-v12';
 export function validateMemoryInput(b){
  if(!b||typeof b.lifeId!=='string'||b.lifeId.length>100||!Array.isArray(b.memories)||b.memories.length>30||!Array.isArray(b.messages)||b.messages.length>80||!Array.isArray(b.context)||b.context.length>12)throw new AppError('input');
  for(const m of [...b.messages,...b.context,...b.memories])if(typeof m.id!=='string'||m.id.length>180||typeof m.text!=='string'||!m.text.trim()||m.text.length>2500)throw new AppError('input');
@@ -47,14 +48,14 @@ export function createMemoryTasks({instanceId,run}){
    if(job.fingerprint!==fingerprint)throw new AppError('task_input_changed',409);
    if(!jobs.has(key)){if(jobs.size>=1000)throw new AppError('capacity',503);jobs.set(key,job);}
    if(attempt<=job.attempt)return job.promise.then(r=>({...r,batchId:input.batchId}));
-   if(job.status!=='failed'||job.error!=='invalid_response')throw new AppError('retry_exhausted',409);
+   if(!(job.status==='failed'&&job.error==='invalid_response')&&!job.retryableProfile)throw new AppError('retry_exhausted',409);
   }else{
    if(attempt!==0)throw new AppError('task_missing',409);
    if(jobs.size>=1000)throw new AppError('capacity',503);
    job={fingerprint,batchKey,attempt:0};jobs.set(key,job);batches.set(batchKey,job);
   }
   job.attempt=attempt;job.status='pending';
-  job.promise=(data.messages.length?Promise.resolve().then(()=>run(data,input.batchId)):Promise.resolve({lifeId:data.lifeId,batchId:input.batchId,operations:[]})).then(r=>{job.status='complete';return r;},e=>{job.status='failed';job.error=e.category;throw e;});
+  job.promise=(data.messages.length?Promise.resolve().then(()=>run(data,input.batchId)):Promise.resolve({lifeId:data.lifeId,batchId:input.batchId,operations:[]})).then(r=>{job.status='complete';job.retryableProfile=Boolean(r.profile&&data.globalProfile&&(PROFILE_FIELDS.every(k=>!r.profile[k]?.trim())||PROFILE_FIELDS.some(k=>data.globalProfile[k]?.trim()&&!r.profile[k]?.trim())));return r;},e=>{job.status='failed';job.error=e.category;throw e;});
   return job.promise;
  }};
 }
