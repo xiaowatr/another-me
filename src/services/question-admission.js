@@ -4,8 +4,11 @@ function pause(ms,signal){return new Promise((resolve,reject)=>{const stop=()=>{
 export async function planWhenReady(request,background,signal,onWait=()=>{},options={}){
  const now=options.now||Date.now,sleep=options.sleep||pause,deadline=now()+(options.waitMs??45000);let waits=0;
  async function recover(path,body){for(let attempt=1;attempt<=3;attempt++){signal?.throwIfAborted();try{return await request(path,body,signal);}catch(e){signal?.throwIfAborted();if(attempt===3||!['network','timeout'].includes(e.category))throw e;onWait(`连接暂时中断，正在接回补充问题（${attempt+1}/3）…`);await sleep(attempt*1000,signal);}}}
- for(;;){signal?.throwIfAborted();const status=await recover('/api/availability',null);
-  if(status.available){onWait('正在读你写下的这些…');try{return await recover('/api/questions',{background});}catch(e){if(e.category!=='busy'||!e.retryableBeforeModel)throw e;}}
+ let waiting=false;
+ for(;;){signal?.throwIfAborted();
+  if(!waiting){onWait('正在读你写下的这些…');try{return await recover('/api/questions',{background});}catch(e){if(e.category!=='busy'||!e.retryableBeforeModel)throw e;waiting=true;}}
+  const status=await recover('/api/availability',null);
+  if(status.available){waiting=false;continue;}
   const remaining=deadline-now();if(remaining<=0){const e=new Error('上一项后台任务仍在处理，补充内容已保留。请稍后再提交，不用重新填写。');e.category='busy';throw e;}
   onWait(`${taskNames[status.task]||'后台任务'}还在处理，正在等待，结束后会自动继续。`);
   await sleep(Math.min(remaining,1000*2**Math.min(waits++,3)),signal);

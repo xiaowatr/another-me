@@ -1,3 +1,4 @@
+import {checkRequest} from './content-safety.js';
 import {createDraftArchive} from './story-drafts.js';
 import {consumeStoryCall} from './story-stage-budget.js';
 import {memoryClientRecord} from './memory-diagnostic.js';
@@ -13,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { loadEnvFile } from 'node:process';
 import { createGuard, serveStatic } from './production.js';
-import { loadConfig, AppError, errorMessages } from './core.js';
+import { loadConfig, AppError, errorMessages, publicErrorMessage } from './core.js';
 import { createCaller } from './minimax.js';
 import { createExperience } from './experience.js';
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -24,7 +25,7 @@ const config = loadConfig(process.env);
 const caller = createCaller(config);
 
 const app = createExperience(config, caller, record => { try { fs.appendFileSync('.local/requests.jsonl', JSON.stringify(record) + '\n'); } catch { throw new AppError('local_storage', 500); } });
-const tasks=createStoryTasks({archive:createDraftArchive(),check:owner=>app.checkAvailable(owner),run:(input,{owner,signal,taskId,parentTaskId,operation,onSetting,onDraft,poolState})=>withOwner(owner,()=>{const headers={};const fake={setHeader:(k,v)=>headers[k]=v,statusCode:200};const trace=makeStoryTrace(fake,taskId,{detached:true,onModelStart:(task,stage)=>consumeStoryCall(operation,task,stage)});Object.assign(trace.record,{operationId:operation.id,parentTaskId,attempt:operation.attempts,candidateCount:operation.pool?.generated||0});trace.record.ownerTag=owner.slice(0,12);trace.record.taskId=taskId;return trace.run(()=>app.story(input,{signal,onSetting,onDraft,poolState})).catch(e=>{fake.statusCode=e.status||500;throw e;}).finally(()=>{trace.record.cumulativeCallCount=operation.calls;trace.record.stageCallCounts=operation.stageCalls;trace.complete();});})});
+const tasks=createStoryTasks({archive:process.env.RETAIN_STORY_DRAFTS==='1'?createDraftArchive():()=>{},check:owner=>app.checkAvailable(owner),run:(input,{owner,signal,taskId,parentTaskId,operation,onSetting,onDraft,poolState})=>withOwner(owner,()=>{const headers={};const fake={setHeader:(k,v)=>headers[k]=v,statusCode:200};const trace=makeStoryTrace(fake,taskId,{detached:true,onModelStart:(task,stage)=>consumeStoryCall(operation,task,stage)});Object.assign(trace.record,{operationId:operation.id,parentTaskId,attempt:operation.attempts,candidateCount:operation.pool?.generated||0});trace.record.ownerTag=owner.slice(0,12);trace.record.taskId=taskId;return trace.run(()=>app.story(input,{signal,onSetting,onDraft,poolState})).catch(e=>{fake.statusCode=e.status||500;throw e;}).finally(()=>{trace.record.cumulativeCallCount=operation.calls;trace.record.stageCallCounts=operation.stageCalls;trace.complete();});})});
 const memoryTasks=createMemoryTasks({instanceId:tasks.instanceId,run:(data,batchId)=>app.memory(data,batchId)});
 const port = Number(process.env.PORT || 5173);
 const publicOrigin = process.env.APP_ORIGIN || process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
@@ -58,12 +59,13 @@ const server = http.createServer(async (req, res) => {
       if ((production ? req.headers.origin !== publicOrigin : req.headers.origin !== `http://${req.headers.host}`) || !req.headers['content-type']?.startsWith('application/json')) throw new AppError('forbidden', 403);
       const input = await readBody(req);
       if (!input || typeof input !== 'object' || Array.isArray(input)) throw new AppError('input');
+      checkRequest(pathname,input);
       if(taskMatch&&taskMatch[2])return json(res,200,tasks.cancel(owner,taskMatch[1]));
       if(pathname==='/api/memory/diagnostic'){const record=memoryClientRecord(input,requestId);if(!record)throw new AppError('input');if(process.env.REQUEST_DIAGNOSTICS!=='0')console.info(JSON.stringify(record));return json(res,200,{ok:true});}
       if(pathname==='/api/memory/extract'){
         const log=record=>{if(process.env.REQUEST_DIAGNOSTICS!=='0')console.info(JSON.stringify({type:'memory_request_diagnostic',task:'memory',requestId,codeVersion:app.status().version,...record}));};
         log({stage:'received',batchId:/^[a-f0-9-]{36}$/.test(input.batchId||'')?input.batchId:null});
-        try{const result=await withOwner(owner,()=>memoryTasks.submit(owner,input));log({stage:'returned',operations:result.operations.length,summary:result.summary||null,modelRequestId:result.requestId||null,durationMs:Date.now()-receivedAt});return json(res,200,result);}
+        try{const result=await withOwner(owner,()=>memoryTasks.submit(owner,input));log({stage:'returned',operations:result.operations.length,summaryPresent:Boolean(result.summary),modelRequestId:result.requestId||null,durationMs:Date.now()-receivedAt});return json(res,200,result);}
         catch(e){log({stage:'failed',category:e.category||'upstream',durationMs:Date.now()-receivedAt});throw e;}
       }
       if(pathname === '/api/session/restore')return json(res,200,withOwner(owner,()=>app.restore(input)));
@@ -81,11 +83,11 @@ const server = http.createServer(async (req, res) => {
         const controller=new AbortController();res.on('close',()=>controller.abort());
         res.writeHead(200,{'Content-Type':'application/x-ndjson; charset=utf-8','Cache-Control':'no-cache, no-transform','X-Content-Type-Options':'nosniff','X-Accel-Buffering':'no'});res.flushHeaders();
         let streamId=/^[a-f0-9-]{36}$/.test(req.headers['x-client-trace-id']||'')?req.headers['x-client-trace-id']:null;const emit=data=>{if(data.requestId)streamId=data.requestId;if(data.type==='error'&&!data.requestId)data={...data,requestId:streamId};if(!res.destroyed)res.write(JSON.stringify(data)+'\n');};
-        try{await withOwner(owner,()=>app.chatStream(input,emit,controller.signal));}catch(e){if(process.env.REQUEST_DIAGNOSTICS!=='0')console.info(JSON.stringify({type:'chat_request_error',requestId:e.requestId||streamId,category:e.category||'network',stage:e.diagnostic?.stage||'stream',reason:e.diagnostic?.reason||null,durationMs:Date.now()-receivedAt,codeVersion:app.status().version}));emit({type:'error',error:errorMessages[e.category] || '回复中断，请手动重试。',category:e.category || 'network',requestId:e.requestId});}finally{res.end();}return;
+        try{await withOwner(owner,()=>app.chatStream(input,emit,controller.signal));}catch(e){if(process.env.REQUEST_DIAGNOSTICS!=='0')console.info(JSON.stringify({type:'chat_request_error',requestId:e.requestId||streamId,category:e.category||'network',stage:e.diagnostic?.stage||'stream',reason:e.diagnostic?.reason||null,durationMs:Date.now()-receivedAt,codeVersion:app.status().version}));emit({type:'error',error:publicErrorMessage(e),category:e.category || 'network',requestId:e.requestId});}finally{res.end();}return;
       }
       // All production chat uses the streaming route and explicit confirmed memories.
       return json(res, 404, { error: '接口不存在。' });
-    } catch (e) { const category = e instanceof AppError ? e.category : 'upstream';e.requestId||=requestId;if(process.env.REQUEST_DIAGNOSTICS!=='0')console.info(JSON.stringify({type:'api_error',requestId,route:pathname.replace(/tasks\/[a-f0-9-]+/,'tasks/:id'),category,durationMs:Date.now()-receivedAt,codeVersion:app.status().version})); return json(res, e instanceof AppError ? e.status : 500, { error: errorMessages[category] || '请求失败，请稍后重试。', category, requestId: e.requestId,...(e.retryableBeforeModel?{retryableBeforeModel:true}:{}) }); }
+    } catch (e) { const category = e instanceof AppError ? e.category : 'upstream';e.requestId||=requestId;if(process.env.REQUEST_DIAGNOSTICS!=='0')console.info(JSON.stringify({type:'api_error',requestId,route:pathname.replace(/tasks\/[a-f0-9-]+/,'tasks/:id'),category,durationMs:Date.now()-receivedAt,codeVersion:app.status().version})); return json(res, e instanceof AppError ? e.status : 500, { error: publicErrorMessage({...e,category}), category, requestId: e.requestId,...(e.retryableBeforeModel?{retryableBeforeModel:true}:{}) }); }
   }
   // 开发服务器不能向浏览器提供密钥、诊断或服务端源文件。
   let decoded; try { decoded = decodeURIComponent(req.url); } catch { res.writeHead(400); return res.end(); }

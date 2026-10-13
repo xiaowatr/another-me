@@ -8,7 +8,7 @@ import {randomUUID} from 'node:crypto';
 import {AppError} from './core.js';
 import {hardStoryIssues} from './story-hard-checks.js';
 import {STORY_MAX_MODEL_CALLS} from '../src/story-budget.js';
-const fatal=e=>['configuration','balance','local_storage','content','stopped'].includes(e.category)||e.diagnostic?.retryable===false;
+const fatal=e=>['configuration','balance','local_storage','content','privacy','stopped'].includes(e.category)||e.diagnostic?.retryable===false;
 // Generation and optional field repair share the same four-call budget and task slot.
 export async function chooseStoryPool({caller,messages,background,effectiveSetting,signal,onDraft=()=>{},state={generated:0,drafts:[]},sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms))}){
  const keep=d=>{state.drafts.push(d);onDraft(d);};

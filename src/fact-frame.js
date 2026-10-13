@@ -83,10 +83,11 @@ export function currentOpening(story,background){
  return year?`我在这里。那条路已经走过来了，${year}年的事，可以慢慢说。`:'我在这里。那条路已经走过来了，你想从哪里聊起？';
 }
 export function sceneTimeLabel(time,background){
+ time=String(time||'').replace(/^年份未明确 · | · 年份未明确$/g,'');
  if(/\d{4}年|同年|次年|翌年/.test(time))return time;
  const start=timeAnchors(background||{}).start;
  // Display the explicit story origin, not an inferred calendar year for this scene.
  // Relative weeks/months can cross a year boundary when the starting month is unknown.
- if(start&&!start.estimated&&!/回忆|此前|回顾|小时候|童年/.test(time))return `${start.year}年起 · ${String(time).replace(/ · 年份未明确$/,'')}`;
- return /年份未明确/.test(time)?time:`${time} · 年份未明确`;
+ if(start&&!/回忆|此前|回顾|小时候|童年/.test(time))return `${start.estimated?'约':''}${start.year}年起 · ${String(time).replace(/ · 年份未明确$/,'')}`;
+ return time;
 }

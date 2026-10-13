@@ -1,7 +1,7 @@
 import {settingNote} from '../src/setting-note.js';
 import {STORY_MAX_MODEL_CALLS,STORY_MAX_TOTAL_CALLS} from '../src/story-budget.js';
 import {createHash,randomUUID} from 'node:crypto';
-import {AppError,errorMessages} from './core.js';
+import {AppError,errorMessages,publicErrorMessage} from './core.js';
 export function createStoryTasks({run,check=()=>{},now=Date.now,ttl=3600000,max=100,archive=()=>{}}={}){
  const records=new Map(),instanceId=randomUUID();
  const prune=()=>{for(const [id,t]of records)if(t.status!=='running'&&now()-t.finishedAt>ttl)records.delete(id);};
@@ -22,6 +22,6 @@ export function createStoryTasks({run,check=()=>{},now=Date.now,ttl=3600000,max=
   const t={operation,parentTaskId,id:taskId,owner,hash,status:'running',createdAt:now(),controller:new AbortController()};records.set(taskId,t);
   const onDraft=d=>{const saved={...d,inputHash:hash,taskId,createdAt:now()},old=operation.drafts.find(x=>x.id===d.id&&x.inputHash===hash);archive(owner,operation.id,saved);if(old)Object.assign(old,saved);else operation.drafts.push(saved);};
   let started;try{started=run(input,{signal:t.controller.signal,owner,taskId,parentTaskId,operation,poolState:operation.pool,onDraft,onSetting:effective=>t.settingNote=settingNote(effective)});}catch(e){started=Promise.reject(e);}
-  t.promise=Promise.resolve(started).then(result=>{if(t.controller.signal.aborted){t.status='cancelled';t.error={category:'stopped',error:errorMessages.stopped};}else{t.result=result;t.status='succeeded';}},e=>{t.status=t.controller.signal.aborted?'cancelled':'failed';const category=t.controller.signal.aborted?'stopped':e.category||'upstream';t.error={category,error:errorMessages[category]||errorMessages.upstream,requestId:e.requestId};}).finally(()=>t.finishedAt=now());return view(t);
+  t.promise=Promise.resolve(started).then(result=>{if(t.controller.signal.aborted){t.status='cancelled';t.error={category:'stopped',error:errorMessages.stopped};}else{t.result=result;t.status='succeeded';}},e=>{t.status=t.controller.signal.aborted?'cancelled':'failed';const category=t.controller.signal.aborted?'stopped':e.category||'upstream';t.error={category,error:publicErrorMessage({...e,category}),requestId:e.requestId};}).finally(()=>t.finishedAt=now());return view(t);
  },get:(owner,id)=>view(own(owner,id)),cancel(owner,id){const t=own(owner,id);if(t.status==='running')t.controller.abort();return view(t);},async settled(owner,id){await own(owner,id).promise;return view(own(owner,id));}};
 }

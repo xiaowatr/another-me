@@ -27,7 +27,8 @@ export const errorMessages = {
   timeout: '模型回复超时，请稍后手动重试。此次请求可能已产生用量。',
   upstream: '模型服务暂时不可用，请稍后手动重试。',
   invalid_response: '这次没能生成成功，你填写的内容还在。可以重试。',
-  content: '本次内容无法由模型处理，请调整输入后重试。',
+  content: '这部分内容无法提供，可以换成不含露骨或伤害细节的表达。',
+  privacy: '请移除证件号、银行卡、密码或密钥后再继续。',
   input: '请检查输入内容；必填内容不能为空，且不能超过长度限制。',
   session: '当前故事会话已失效，请返回重新生成。',
   retry_exhausted: '这次生成已达到尝试上限。填写内容和已有草稿已保留。',
@@ -164,3 +165,6 @@ export function decodeJson(content,diagnostic={}){
  try{const data=JSON.parse(jsonrepair(text));diagnostic.parseMode='syntax_repair';return data;}
  catch{throw new AppError('invalid_response',502,{stage:'parse',reason:'json_syntax'});}
 }
+
+// Only public fixed copy is returned; never repeat filtered user/model text.
+export function publicErrorMessage(error){if(error?.category==='content'){if(error.diagnostic?.reason==='blocked_self_harm')return '先别伤害自己，好吗？我可以陪你聊聊。';if(error.diagnostic?.stage==='safety_output')return '不好意思，我得重新整理一下自己的语言。';return '这部分我没法细说，换个不含露骨或伤害细节的说法吧，我们继续聊。';}return errorMessages[error?.category]||errorMessages.upstream;}

@@ -3,7 +3,7 @@ import {PROFILE_FIELDS} from '../src/global-memory.js';
 import {participantIdentity,PARTICIPANT_RULES,isIdentityCorrection,inventedRelationship} from '../src/participant-identity.js';
 import {createHash} from 'node:crypto';
 import {AppError} from './core.js';
-export const MEMORY_PROMPT_VERSION='memory-v12';
+export const MEMORY_PROMPT_VERSION='memory-v13';
 export function validateMemoryInput(b){
  if(!b||typeof b.lifeId!=='string'||b.lifeId.length>100||!Array.isArray(b.memories)||b.memories.length>30||!Array.isArray(b.messages)||b.messages.length>80||!Array.isArray(b.context)||b.context.length>12)throw new AppError('input');
  for(const m of [...b.messages,...b.context,...b.memories])if(typeof m.id!=='string'||m.id.length>180||typeof m.text!=='string'||!m.text.trim()||m.text.length>2500)throw new AppError('input');

@@ -20,12 +20,12 @@ test('ordinary bank and reviewed candidates use one wording key without changing
  const candidate=JSON.parse(questionReviewMessages(b,{questions:[q()],stop:false})[1].content).candidates[0];assert.ok(candidate.questionText);assert.equal(candidate.question,undefined);assert.equal(JSON.stringify(QUESTION_BY_ID),before);
 });
 test('legacy wording reaches persisted answer context; ambiguous or malformed dual fields use original',async()=>{
- const text='当时做决定，你希望保留自己的哪个习惯？',legacy={...q(),question:text};const saved=JSON.stringify(legacy);
- const {plan,count}=await run(initial([q()]),reviewed([legacy]));assert.equal(count,2);assert.equal(plan.questions[0].questionText,text);assert.equal(plan.planDiagnostics.stages.review.wording.alias,1);assert.equal(JSON.stringify(legacy),saved);
- let s=supplementState(b);s.shown=['G08'];s.pages=[['G08']];s.questionMeta={G08:plan.questions[0]};s.answers.G08={selected:[],text:'我喜欢写下来再决定',skipped:false};s.plan=plan;
+ const text='当时做决定，你希望保留自己的哪个习惯？',legacy={...q('G19'),question:text};const saved=JSON.stringify(legacy);
+ const {plan,count}=await run(initial([q('G19')]),reviewed([legacy]));assert.equal(count,2);assert.equal(plan.questions[0].questionText,text);assert.equal(plan.planDiagnostics.stages.review.wording.alias,1);assert.equal(JSON.stringify(legacy),saved);
+ let s=supplementState(b);s.shown=['G19'];s.pages=[['G19']];s.questionMeta={G19:plan.questions[0]};s.answers.G19={selected:[],text:'我喜欢写下来再决定',skipped:false};s.plan=plan;
  const restored=saveSupplement(b,s);assert.equal(supplementaryContext(restored).answers[0].question,text);assert.deepEqual(supplementState(restored).plan.planDiagnostics,plan.planDiagnostics);
- for(const meta of [{questionText:'问法甲',question:'问法乙'},{questionText:42,question:text},{questionText:text,question:'字'.repeat(181)}]){const w=resolveQuestionWording(QUESTION_BY_ID.G08,meta,b);assert.equal(w.wordingSource,'bank');assert.equal(w.questionText,questionTitle(QUESTION_BY_ID.G08,null,b));}
- assert.equal(resolveQuestionWording(QUESTION_BY_ID.G08,{questionText:text,question:' '+text+' '},b).wordingSource,'questionText');
+ for(const meta of [{questionText:'问法甲',question:'问法乙'},{questionText:42,question:text},{questionText:text,question:'字'.repeat(181)}]){const w=resolveQuestionWording(QUESTION_BY_ID.G19,meta,b);assert.equal(w.wordingSource,'bank');assert.equal(w.questionText,questionTitle(QUESTION_BY_ID.G19,null,b));}
+ assert.equal(resolveQuestionWording(QUESTION_BY_ID.G19,{questionText:text,question:' '+text+' '},b).wordingSource,'questionText');
 });
 test('empty model decision and filtered empty are distinct; low-value alias cannot bypass filtering',async()=>{
  const zero=await run(initial(),reviewed());assert.equal(zero.plan.planDiagnostics.outcome,'model_no_questions');assert.equal(zero.plan.optionalAnalysisUnavailable,undefined);

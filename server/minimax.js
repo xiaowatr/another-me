@@ -1,6 +1,8 @@
+import {assertSafe,SAFETY_RULE} from './content-safety.js';
 import {transportError} from './transport-error.js';
 import {plainChatContent} from './chat-content.js';
 import {chatTools,chatToolStream} from './chat-tools.js';
+import {questionTools,receiveQuestionResult} from './question-contract.js';
 import {chatEnvelope} from './chat-envelope.js';
 import {fillStoryMetadata} from './story-metadata.js';
 import {storyRequestInput} from './story-request.js';
@@ -22,19 +24,21 @@ import { AppError, classify, parseResult, responseShape } from './core.js';
 import { PROMPT_VERSION } from './prompts.js';
 export function createCaller(config, { fetchImpl = fetch, directory = '.local', timeoutMs = 90000, log = line=>console.info(line), env=process.env } = {}) {
   fs.mkdirSync(directory, { recursive: true });
-  const capturedCases=new Set(),failureEvidence=createFailureEvidence(path.join(directory,'failed-outputs'));
+  const capturedCases=new Set(),failureEvidence=env.RETAIN_FAILED_OUTPUTS==='1'?createFailureEvidence(path.join(directory,'failed-outputs')):{save(){}};
   const emit=record=>{if(env.REQUEST_DIAGNOSTICS!=='0')log(JSON.stringify({type:'model_diagnostic',...record}));};
   const auditPath = path.join(directory, 'requests.jsonl');
   async function call(task, messages, options = {}) {
     if(!['story','chat','memory','questions'].includes(task))throw new AppError('configuration',500);
     let failureOutput=null;
+    const consumer=options;let safeBuffer='';options={...consumer,onText:consumer.onText?(text=>{safeBuffer+=text;}):undefined,validateResult:result=>{assertSafe(result);if(consumer.onText&&safeBuffer){consumer.onText(safeBuffer);safeBuffer='';}consumer.validateResult?.(result);}};
+    messages=messages.map((m,i)=>i===0&&m.role==='system'?{...m,content:m.content+'\n'+SAFETY_RULE}:m);if(messages[0]?.role!=='system')messages=[{role:'system',content:SAFETY_RULE},...messages];
     const model=task==='memory'?(config.memoryModel||'MiniMax-M3'):config.model;const trace=activeStoryTrace();const started = Date.now();
-    const record = { operationId:trace?.record.operationId||options.chatOperationId||null,parentTaskId:trace?.record.parentTaskId||null,attempt:trace?.record.attempt||(task==='chat'?options.chatAttempt:null)||null,codeVersion:CODE_VERSION,actualModel:null,failureStage:null,failureReason:null,requestedRange:options.diagnosticRange||null, requestId: randomUUID(), time: new Date().toISOString(), task, model, promptVersion: task==='memory'?MEMORY_PROMPT_VERSION:task==='questions'?PLANNER_VERSION:PROMPT_VERSION, durationMs: 0, success: false, errorCategory: null, inputTokens: null, outputTokens: null, totalTokens: null, sent: false, site:config.site, usageSource:null, cachedTokens:null, auditGroup:options.auditGroup || null, status:'pending',parentRequestId:options.parentRequestId||null };
+    const record = { operationId:trace?.record.operationId||options.chatOperationId||null,parentTaskId:trace?.record.parentTaskId||null,attempt:trace?.record.attempt||(task==='chat'?options.chatAttempt:null)||null,codeVersion:CODE_VERSION,actualModel:null,failureStage:null,failureReason:null,requestedRange:options.diagnosticRange?{months:options.diagnosticRange.months,anchor:options.diagnosticRange.anchor,precision:options.diagnosticRange.precision,start:options.diagnosticRange.start,end:options.diagnosticRange.end}:null, requestId: randomUUID(), time: new Date().toISOString(), task, model, promptVersion: task==='memory'?MEMORY_PROMPT_VERSION:task==='questions'?PLANNER_VERSION:PROMPT_VERSION, durationMs: 0, success: false, errorCategory: null, inputTokens: null, outputTokens: null, totalTokens: null, sent: false, site:config.site, usageSource:null, cachedTokens:null, auditGroup:options.auditGroup || null, status:'pending',parentRequestId:options.parentRequestId||null };
     if(task==='memory')record.memoryBatchId=options.memoryBatchId||null;
     let phaseStart=started;record.phaseMs={};const stage=name=>{if(record.stage)record.phaseMs[record.stage]=(record.phaseMs[record.stage]||0)+Date.now()-phaseStart;record.stage=name;phaseStart=Date.now();};
     if(options.diagnosticClock){const c=options.diagnosticClock;record.clock={asOf:/^\d{4}-\d{2}-\d{2}$/.test(c.asOf)?c.asOf:null,startYear:Number.isInteger(c.startYear)?c.startYear:null,startMonth:Number.isInteger(c.startMonth)?c.startMonth:null};}
     record.build={commit:/^[a-f0-9]{40}$/.test(process.env.RENDER_GIT_COMMIT||'')?process.env.RENDER_GIT_COMMIT:null};
-    const scoped=task==='story'&&options.diagnosticCaseId&&options.diagnosticCaseId===env.DIAGNOSTIC_CASE_ID&&Date.parse(env.DIAGNOSTIC_CASE_EXPIRES_AT||'')>Date.now()&&!capturedCases.has(options.diagnosticCaseId);if(scoped)capturedCases.add(options.diagnosticCaseId);
+    const scoped=env.RETAIN_FAILED_OUTPUTS==='1'&&task==='story'&&options.diagnosticCaseId&&options.diagnosticCaseId===env.DIAGNOSTIC_CASE_ID&&Date.parse(env.DIAGNOSTIC_CASE_EXPIRES_AT||'')>Date.now()&&!capturedCases.has(options.diagnosticCaseId);if(scoped)capturedCases.add(options.diagnosticCaseId);
     const evidence=text=>{if(!scoped||typeof text!=='string')return;const safe=redactEvidence(text,config.key),limit=24000,part=safe.slice(0,limit);for(let offset=0;offset<part.length;offset+=1800)log(JSON.stringify({type:'scoped_story_evidence',requestId:record.requestId,caseId:options.diagnosticCaseId,offset,totalLength:safe.length,truncated:safe.length>limit,output:part.slice(offset,offset+1800)}));};
     try {
       if (config.mode !== 'real') throw new AppError('configuration');
@@ -45,13 +49,14 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       const noThinking=task==='memory'||task==='questions'||task==='chat';
       record.thinking=noThinking?'disabled':task==='story'?(config.storyThinking||'disabled'):'unchanged';
       record.maxCompletionTokens=options.repairFields?1200:task==='memory'?(config.memoryMaxTokens||2000):task==='story'?6000:3500;
-      const transportTools=task==='story'?(options.repairFields?fieldRepairTools(options.repairFields,messages):storyTools(messages)):null;
+      const transportTools=task==='story'?(options.repairFields?fieldRepairTools(options.repairFields,messages):storyTools(messages)):task==='questions'&&options.questionStage?questionTools(options.questionStage):null;
+      if(task==='questions')record.questionStage=options.questionStage||null;
       if(options.repairFields)record.repairFields=options.repairFields;
       stage('transport');
       const response = await fetchImpl(`${config.base}/chat/completions`, {
         method: 'POST', redirect: 'error',
         headers: { 'Authorization': `Bearer ${config.key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, messages, ...(noThinking?{thinking:{type:'disabled'}}:task==='story'?{thinking:{type:config.storyThinking||'disabled'}}:{}), ...(transportTools?{tools:transportTools,tool_choice:transportTools.length===1?{type:'function',function:{name:transportTools[0].function.name}}:'required'}:options.chatEnvelope?{tools:chatTools,tool_choice:{type:'function',function:{name:'submit_chat'}}}:{}), stream: Boolean(options.onText), ...(options.onText ? {stream_options:{include_usage:true}} : {}), reasoning_split: true, temperature: 1, max_completion_tokens: record.maxCompletionTokens }),
+        body: JSON.stringify({ model, messages, ...(noThinking?{thinking:{type:'disabled'}}:task==='story'?{thinking:{type:config.storyThinking||'disabled'}}:{}), ...(transportTools?{tools:transportTools,tool_choice:transportTools.length===1?{type:'function',function:{name:transportTools[0].function.name}}:'required'}:options.chatEnvelope&&!options.plainChatReply?{tools:chatTools,tool_choice:{type:'function',function:{name:'submit_chat'}}}:{}), stream: Boolean(options.onText), ...(options.onText ? {stream_options:{include_usage:true}} : {}), reasoning_split: true, temperature: 1, max_completion_tokens: record.maxCompletionTokens }),
         signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
       });
       record.httpStatus=response.status;
@@ -77,7 +82,7 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
           }
         }
         record.streamShape={doneMarker:done,finish:['stop','length','content_filter','tool_calls'].includes(finish)?finish:'unknown',bodyLength:reply.length};
-        if(envelope&&['stop','tool_calls'].includes(finish)){record.chatToolShape=toolStream.shape();if(record.chatToolShape.seen){try{toolStream.finish();}catch(e){throw new AppError('invalid_response',502,{stage:'parse',reason:e.message});}if(finish!=='tool_calls')throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_tool_finish'});record.chatTransport='tool_arguments';record.chatContentShape={length:contentWire.length,ignored:true};}else {if(finish==='tool_calls')throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_tool_missing'});record.chatContentShape={length:contentWire.length,ignored:false};const plain=plainChatContent(contentWire);if(plain){if(options.requireStructuredChat)throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_tool_missing'});const safe=textFilterForEnvelope(plain);if(!safe.trim())throw new AppError('invalid_response',502);reply=safe;if(record.firstBodyMs==null)record.firstBodyMs=Date.now()-started;options.onText(safe);const result={reply,updateType:'none',memoryOperations:[],memoryError:'missing_structured_memory'};record.chatTransport='plain_text';record.chatDegraded=true;record.chatMemoryStatus='failed';record.streamShape.bodyLength=reply.length;options.validateResult?.(result);record.success=true;return {result,requestId:record.requestId};}record.chatTransport='content_json';try{envelope.push(contentWire);}catch(e){record.chatEnvelopeShape=envelope.shape();record.chatEnvelopeError=/^chat_envelope_[a-z_]+$/.test(e.message)?e.message:'invalid_json';throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_envelope'});}}record.chatEnvelopeShape=envelope.shape();let result;try{result=envelope.finish();}catch(e){const reason=String(e.message||'');record.chatEnvelopeError=/^chat_envelope_[a-z_]+$/.test(reason)?reason:reason.startsWith('duplicate_field:')?'duplicate_field':'invalid_json';throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_envelope'});}if(!reply.trim())throw new AppError('invalid_response',502);result.reply=reply;record.streamShape.bodyLength=reply.length;options.validateResult?.(result);record.success=true;return {result,requestId:record.requestId};}
+        if(envelope&&['stop','tool_calls'].includes(finish)){record.chatToolShape=toolStream.shape();if(record.chatToolShape.seen){try{toolStream.finish();}catch(e){throw new AppError('invalid_response',502,{stage:'parse',reason:e.message});}if(finish!=='tool_calls')throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_tool_finish'});record.chatTransport='tool_arguments';record.chatContentShape={length:contentWire.length,ignored:true};}else {if(finish==='tool_calls')throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_tool_missing'});record.chatContentShape={length:contentWire.length,ignored:false};const plain=plainChatContent(contentWire);if(plain){if(options.requireStructuredChat)throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_tool_missing'});const safe=textFilterForEnvelope(plain);if(!safe.trim())throw new AppError('invalid_response',502);reply=safe;if(record.firstBodyMs==null)record.firstBodyMs=Date.now()-started;options.onText(safe);const result={reply,updateType:'none',memoryOperations:[],...(options.plainChatReply?{chatProtocol:'plain_text'}:{chatProtocolError:'missing_structured_reply'})};record.chatTransport='plain_text';record.chatDegraded=!options.plainChatReply;record.chatMemoryStatus='not_requested';record.chatProtocolStatus=options.plainChatReply?'plain_text':'degraded';record.streamShape.bodyLength=reply.length;options.validateResult?.(result);record.success=true;return {result,requestId:record.requestId};}record.chatTransport='content_json';try{envelope.push(contentWire);}catch(e){record.chatEnvelopeShape=envelope.shape();record.chatEnvelopeError=/^chat_envelope_[a-z_]+$/.test(e.message)?e.message:'invalid_json';throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_envelope'});}}record.chatEnvelopeShape=envelope.shape();let result;try{result=envelope.finish();}catch(e){const reason=String(e.message||'');record.chatEnvelopeError=/^chat_envelope_[a-z_]+$/.test(reason)?reason:reason.startsWith('duplicate_field:')?'duplicate_field':'invalid_json';throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_envelope'});}if(!reply.trim())throw new AppError('invalid_response',502);result.reply=reply;record.streamShape.bodyLength=reply.length;options.validateResult?.(result);record.success=true;return {result,requestId:record.requestId};}
         if(finish!=='stop' || !reply.trim())throw new AppError('invalid_response',502);
         const result={reply,updateType:'none'};options.validateResult?.(result);record.success=true;return {result,requestId:record.requestId};
       }
@@ -96,7 +101,7 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       if (body.input_sensitive || body.output_sensitive) throw new AppError('content', 422);
       stage('finish');
       const choice=body.choices?.[0], calls=choice?.message?.tool_calls;
-      const structured=task==='story'&&choice?.finish_reason==='tool_calls';
+      const structured=!!transportTools&&choice?.finish_reason==='tool_calls';
       if (choice?.finish_reason !== 'stop'&&!structured) throw new AppError(choice?.finish_reason==='length'?'output_limit':'invalid_response', 502,{stage:'finish',reason:choice?.finish_reason==='length'?'output_limit':'not_completed'});
       // 不读取 reasoning_details / reasoning_content；不把原始响应或异常打印出来。
       stage('parse_and_schema');record.parsing={};
@@ -104,15 +109,15 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       if(structured){
         const allowed=transportTools.map(t=>t.function.name);
         record.toolStructure={violation:!Array.isArray(calls)?'not_array':calls.length!==1?'call_count':!allowed.includes(calls[0]?.function?.name)?'unapproved_function':typeof calls[0]?.function?.arguments!=='string'?'argument_type':null,isArray:Array.isArray(calls),count:Array.isArray(calls)?calls.length:null,items:Array.isArray(calls)?calls.slice(0,5).map(c=>({functionPresent:!!c?.function,nameAllowed:allowed.includes(c?.function?.name),argumentType:typeof c?.function?.arguments,argumentLength:typeof c?.function?.arguments==='string'?c.function.arguments.length:null})):[]};
-        if(!Array.isArray(calls)||calls.length!==1||!allowed.includes(calls[0]?.function?.name)||typeof calls[0]?.function?.arguments!=='string')throw new AppError('invalid_response',502,{stage:'schema',reason:'invalid_story_tool'});
-        content=calls[0].function.arguments;try{strictJson(content);}catch(e){throw new AppError('invalid_response',502,{stage:'schema',reason:e.message.startsWith('duplicate_field:')?'duplicate_field':'invalid_tool_json'});}record.storyTransport='tool_arguments';
-      }else {if(calls?.length)throw new AppError('invalid_response',502,{stage:'finish',reason:'unexpected_tool_finish'});record.storyTransport=transportTools?'content_json':null;}
+        if(!Array.isArray(calls)||calls.length!==1||!allowed.includes(calls[0]?.function?.name)||typeof calls[0]?.function?.arguments!=='string')throw new AppError('invalid_response',502,{stage:'schema',reason:task==='questions'?'invalid_question_tool':'invalid_story_tool'});
+        content=calls[0].function.arguments;try{strictJson(content);}catch(e){throw new AppError('invalid_response',502,{stage:'schema',reason:e.message.startsWith('duplicate_field:')?'duplicate_field':'invalid_tool_json'});}record[task==='questions'?'questionTransport':'storyTransport']='tool_arguments';
+      }else {if(calls?.length)throw new AppError('invalid_response',502,{stage:'finish',reason:'unexpected_tool_finish'});record[task==='questions'?'questionTransport':'storyTransport']=transportTools?'content_json':null;}
       record.outputEvidence={length:typeof content==='string'?content.length:null,sha256:typeof content==='string'?createHash('sha256').update(content).digest('hex'):null};
       if(transportTools){
-        const received=receiveStructured(content,task,transportTools,messages,record.parsing);
+        const received=task==='questions'?receiveQuestionResult(content,transportTools,options.questionStage,record.parsing):receiveStructured(content,task,transportTools,messages,record.parsing);
         record.schemaValidation={valid:received.errors.length===0,errors:received.errors.slice(0,60),repairs:received.repairs};
         if(received.errors.length){throw new AppError('invalid_response',502,{stage:'schema',reason:'structured_schema',field:received.errors[0].path});}
-        if(!options.repairFields&&storyRequestInput(messages).generationStage==='body'&&received.data.kind==='story'){fillChapterTimes(received.data,storyRequestInput(messages).effectiveSetting);received.data=fillStoryMetadata(received.data,storyRequestInput(messages).effectiveSetting);record.programFilledChapterTimes=true;record.programFilledStoryMetadata=true;}
+        if(task==='story'&&!options.repairFields&&storyRequestInput(messages).generationStage==='body'&&received.data.kind==='story'){fillChapterTimes(received.data,storyRequestInput(messages).effectiveSetting);received.data=fillStoryMetadata(received.data,storyRequestInput(messages).effectiveSetting);record.programFilledChapterTimes=true;record.programFilledStoryMetadata=true;}
         content=JSON.stringify(received.data);
       }
       const normalizedParsing=transportTools?{}:record.parsing;
@@ -129,8 +134,10 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       const transport=!(error instanceof AppError)?transportError(error):null;
       if(transport&&!options.signal?.aborted)record.transportError={kind:transport.kind,codes:transport.codes,retryable:transport.retryable};
       const safeError = options.signal?.aborted ? new AppError('stopped') : error instanceof AppError ? error : new AppError(transport.timedOut?'timeout':'network',502,{stage:record.stage,reason:'transport_'+transport.kind,retryable:transport.retryable});
+      if(safeBuffer)safeError.replyReceived=true;
       record.failureStage=safeError.diagnostic?.stage || record.stage || 'local';
       record.failureReason=safeError.diagnostic?.reason || safeError.category;
+      if(task==='questions'&&safeError.diagnostic?.questionIdIssue)record.questionIdIssue=safeError.diagnostic.questionIdIssue;
       if(task==='story'&&['invalid_response','output_limit'].includes(safeError.category))try{failureEvidence.save(record,failureOutput,config.key);}catch{record.failureEvidenceUnavailable=true;}
       const field=safeError.diagnostic?.field;if(typeof field==='string' && /^(title|identity|intro|character|opening|scenes\.[0-3](?:\.(time|title|text))?)$/.test(field))record.failureField=field;
       if(scoped&&safeError.diagnostic?.evidence){const e=safeError.diagnostic.evidence;log(JSON.stringify({type:'scoped_temporal_evidence',requestId:record.requestId,caseId:options.diagnosticCaseId,field:record.failureField,reason:record.failureReason,chapterTime:redactEvidence(String(e.chapterTime||''),config.key).slice(0,120),bodyDate:e.bodyDate,scope:e.scope,rule:e.rule,clause:redactEvidence(String(e.clause||''),config.key).slice(0,240)}));}

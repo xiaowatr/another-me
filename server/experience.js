@@ -1,3 +1,4 @@
+import {guardExperience,assertSafe} from './content-safety.js';
 import {validateUserProfile} from './user-profile.js';
 import {callChatWithRetry} from './chat-retry.js';
 import {normalizeChatMemory} from './chat-memory.js';
@@ -41,7 +42,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
     }
   }
   function session(id) { const s = sessions.get(id); if (!s || s.owner!==currentOwner() || Date.now() - s.updated > 2 * 60 * 60 * 1000) { if(s?.owner===currentOwner())sessions.delete(id); throw new AppError('session', 410); } return s; }
-  return {
+  return guardExperience({
     questions:input=>questionTasks(currentOwner(),validateBackground(migrateBackground(input.background))),
     availability:()=>slots.availability(currentOwner()),
     checkAvailable:owner=>slots.check(owner,'story-admission'),
@@ -83,7 +84,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       // Unconfirmed chat corrections remain in recent conversation; only UI-confirmed memories are pinned.
       emit({type:'start',turnId:p.id,corrections:s.corrections});
       let buffered='';
-      const forward=text=>{text=qualifyCurrentAge(rolePresentation(readableText(text),s.background),s.background,s.story);const risks=inspectFactText(text,s.background,{memories:s.memories,anchorYear:storyClock(s.background,s.story).year});if(risks.length)throw new AppError('background_conflict',422,{stage:'business',reason:risks[0]});checkChatGrounding(text,s.background,s.memories || [],JSON.stringify({story:s.story,roleRecords:s.roleRecords,fiction:s.memories.filter(m=>m.type==='fiction')}),recallTarget(message));p.text+=text;emit({type:'text',text});};
+      const forward=text=>{assertSafe(text);text=qualifyCurrentAge(rolePresentation(readableText(text),s.background),s.background,s.story);const risks=inspectFactText(text,s.background,{memories:s.memories,anchorYear:storyClock(s.background,s.story).year});if(risks.length)throw new AppError('background_conflict',422,{stage:'business',reason:risks[0]});checkChatGrounding(text,s.background,s.memories || [],JSON.stringify({story:s.story,roleRecords:s.roleRecords,fiction:s.memories.filter(m=>m.type==='fiction')}),recallTarget(message));p.text+=text;emit({type:'text',text});};
       const onText=text=>{buffered+=text;let match;while((match=/[。！？!?\n]/.exec(buffered))){const end=match.index+1;const sentence=buffered.slice(0,end);buffered=buffered.slice(end);forward(sentence);}};
       const clockReply=intent==='chat'?directBeijingReply(message):null;
       const response=clockReply?{result:{reply:clockReply}}:config.mode==='demo'?{result:{reply:await demoProvider.reply({turn:s.history.length/2})}}:await callChatWithRetry(caller,streamingChatMessages(s,message,intent,new Date(),input.messageId||p.id),{onText,chatEnvelope:true,chatOperationId:p.id,validateResult:()=>{if(buffered){forward(buffered);buffered='';}},onStart:requestId=>emit({type:'request',requestId}),signal:AbortSignal.any([signal,controller.signal])});
@@ -122,6 +123,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
     },'story:'+(activeStoryTrace()?.record.taskId||randomUUID())),
     chat: (input) => exclusive('chat', async () => {
       const s = session(input.sessionId);
+      if(input.globalProfile)s.globalProfile=validateUserProfile(input.globalProfile);
       const message = input.message;
       const intent = input.intent || 'chat';
       if (typeof message !== 'string' || !message.trim() || message.length > 2000 || !['chat','reality','fiction'].includes(intent)) throw new AppError('input');
@@ -138,7 +140,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       s.history = s.history.slice(-12); s.updated = Date.now();
       return { reply: response.result.reply, corrections: s.corrections, mode: config.mode, requestId: response.requestId };
     }),
-  };
+  });
 }
 
 

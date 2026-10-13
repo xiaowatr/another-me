@@ -1,5 +1,5 @@
-// Conservative completed plain-text fallback. Protocol text is never displayed.
-// This produces no memory operations and must be reported as degraded memory.
+// Completed natural chat text, also used by the legacy fallback.
+// Protocol text is never displayed and this produces no memory operations.
 export function plainChatContent(content){
  if(typeof content!=='string')return null;
  const text=content.trim();

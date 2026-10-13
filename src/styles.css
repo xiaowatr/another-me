@@ -1,3 +1,14 @@
 
 /* History reuse keeps long original answers readable. */
 .history-reuse-dialog .reuse-item{padding:14px 0;border-bottom:1px solid #ddd3c7}.reuse-item label{display:flex;gap:10px;align-items:flex-start;font-weight:600}.reuse-item input[type=checkbox]{width:18px;height:18px;flex:none}.reuse-item p,.reuse-item summary{white-space:pre-wrap;overflow-wrap:anywhere}.reuse-item summary{cursor:pointer}.history-reuse-dialog header{flex-shrink:0}
+
+/* A green ink checkbox; the native input remains keyboard accessible. */
+.reuse-item .reuse-choice{position:relative;align-items:center;gap:10px;cursor:pointer}
+.reuse-item .reuse-choice input[type=checkbox]{position:absolute;left:0;top:50%;transform:translateY(-50%);opacity:0;width:24px;height:24px;margin:0;padding:0}
+.reuse-check-box{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;flex:0 0 22px;border:1.5px solid #6f8b79;border-radius:4px;background:#fffcf3;transform:rotate(-2deg)}
+.reuse-check-box svg{width:22px;height:22px;fill:none;stroke:#2d614b;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;opacity:0;transform:rotate(2deg)}
+.reuse-choice input:checked+.reuse-check-box{background:#e9efe5;border-color:#2d614b}.reuse-choice input:checked+.reuse-check-box svg{opacity:1}
+.reuse-choice input:focus-visible+.reuse-check-box{outline:2px solid #355343;outline-offset:3px}
+.supplement-dialog .supplement-progress{flex:0 0 auto;margin:0;padding:0 2px 12px;font-size:13px;color:#446650;border-bottom:1px solid #dcded3}
+.supplement-dialog .supplement-question{border-top:0}.supplement-dialog .supplement-actions .supplement-skip{width:100%;text-align:center}
+.event-supplement{margin:20px 0 0;padding-top:12px;border-top:1px solid #dcded3}.event-supplement h3{font-size:16px}

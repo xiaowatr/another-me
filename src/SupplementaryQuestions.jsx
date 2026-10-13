@@ -5,7 +5,8 @@ import {KEY_QUESTION_BY_ID} from './critical-background.js';
 import {withoutOptionalAnalysis} from './question-recovery.js';
 import {questionTime,questionTitle} from './question-context.js';
 import React,{useEffect,useRef,useState} from 'react';
-import {QUESTION_BY_ID as ORDINARY_BY_ID} from './question-bank.js';
+import {RETIRED_QUESTION_IDS,QUESTION_BY_ID as ORDINARY_BY_ID} from './question-bank.js';
+import {questionAnswer,unfinishedQuestionIds} from './question-progress.js';
 import {SCENARIO_BY_ID} from './scenario-bank.js';
 import {scenarioKey,readScenarioHistory,rememberScenario} from './scenario-context.js';
 import {supplementState,supplementKey,saveSupplement,answerText,unknownAnswer,finishSupplementPage,recordSupplementConfirmation} from './supplementary.js';
@@ -16,6 +17,7 @@ const isUnknown=isUnknownOption;
 const InkWait=({children})=> <span className="ink-wait"><span aria-hidden="true" className="ink-dots"><i/><i/><i/></span>{children||'还有些事想问问你…'}</span>;
 export default function SupplementaryQuestions({background,onChange,onClose,onGenerate}){
  const [state,setState]=useState(()=>({...supplementState(background),recentScenarios:readScenarioHistory(appStorage())})),[busy,setBusy]=useState(false),[error,setError]=useState(''),[confirmation,setConfirmation]=useState(''),[progress,setProgress]=useState(''),[analysisFailed,setAnalysisFailed]=useState(false);
+ const [questionIndex,setQuestionIndex]=useState(0);
  const current=useRef(state),base=useRef(background),revision=useRef(0),pending=useRef(null),request=useRef(null),dialog=useRef(null),group=useRef(null),generating=useRef(false),handedOff=useRef(false);
  function store(s){current.current=s;setState(s);base.current=saveSupplement(base.current,s);onChange(base.current);return base.current;}
  function handoff(s){if(handedOff.current||s.plan?.conflict)return;const b=store(s);handedOff.current=true;generating.current=true;setBusy(false);onGenerate(b);}
@@ -33,8 +35,10 @@ export default function SupplementaryQuestions({background,onChange,onClose,onGe
  }
  useEffect(()=>{dialog.current.showModal();if(!current.current.plan&&(!current.current.pages.length||current.current.page>=current.current.pages.length))plan(current.current);return()=>{revision.current++;request.current?.abort();};},[]);
  useEffect(()=>{const y=window.scrollY,x=window.scrollX,body=document.body,old=body.getAttribute('style');Object.assign(body.style,{position:'fixed',top:-y+'px',left:-x+'px',width:'100%',overflow:'hidden'});const vv=window.visualViewport;const fit=()=>{dialog.current?.style.setProperty('--supplement-height',(vv?.height||window.innerHeight)+'px');dialog.current?.style.setProperty('--supplement-top',(vv?.offsetTop||0)+'px');};fit();vv?.addEventListener('resize',fit);vv?.addEventListener('scroll',fit);window.addEventListener('resize',fit);return()=>{vv?.removeEventListener('resize',fit);vv?.removeEventListener('scroll',fit);window.removeEventListener('resize',fit);if(old===null)body.removeAttribute('style');else body.setAttribute('style',old);window.scrollTo(x,y);};},[]);
- useEffect(()=>{group.current?.scrollTo({top:0});},[state.page,state.pages.length]);
- const ids=(state.pages[state.page]||[]).filter(id=>!['G12','G14'].includes(id)&&QUESTION_BY_ID[id]),conflict=state.plan?.conflict;
+ useEffect(()=>{setQuestionIndex(0);},[state.page,state.pages.length]);
+ useEffect(()=>{group.current?.scrollTo({top:0});},[state.page,state.pages.length,questionIndex]);
+ const ids=(state.pages[state.page]||[]).filter(id=>!RETIRED_QUESTION_IDS.includes(id)&&QUESTION_BY_ID[id]),conflict=state.plan?.conflict;
+ const index=Math.min(questionIndex,Math.max(0,ids.length-1)),visibleIds=ids.slice(index,index+1),unfinished=unfinishedQuestionIds(state,ids);
  function finish(all=false){const s=finishSupplementPage(current.current,all?current.current.shown:ids),q=s.scenario;if(q&&(!q.answer.trim()||unknownAnswer(q.answer)))s.scenario={...q,skipped:true,analysis:null};return s;}
  async function generate(){if(generating.current||handedOff.current)return;generating.current=true;let s={...finish(true),skippedRemaining:!current.current.uiReady};if(s.plan?.conflict){generating.current=false;return;}const task=pending.current,version=++revision.current;setBusy(true);store(s);
   if(task){try{const result=await task;if(version!==revision.current)return;if(result.conflict){store({...current.current,plan:result});setBusy(false);generating.current=false;return;}store({...current.current,criticalUnknowns:result.criticalUnknowns||current.current.criticalUnknowns||[],plan:{...result,questions:[],stop:true}});if(s.scenario&&result.scenarioAnalysis)store({...current.current,scenario:{...s.scenario,analysis:result.scenarioAnalysis}});}catch{if(version!==revision.current)return;}}
@@ -46,22 +50,27 @@ export default function SupplementaryQuestions({background,onChange,onClose,onGe
  function move(page){invalidate();store({...current.current,page});}
  async function submitAnswers(){
   if(busy||generating.current)return;
+  const missing=unfinishedQuestionIds(current.current,ids);
+  if(missing.length){setQuestionIndex(ids.indexOf(missing[0]));setError('这一题还没填写。可以回答，也可以明确跳过。');return;}
   const s=finish();
   if(state.page<state.pages.length-1){store({...s,page:state.page+1});return;}
   if(state.scenario||state.plan?.stop||state.shown.length>=8){store({...s,uiReady:true});return;}
   await plan(s);
  }
  const ready=Boolean(state.uiReady)||(!ids.length&&Boolean(state.plan)&&!busy);
+ function nextQuestion(){if(unfinishedQuestionIds(current.current,visibleIds).length){setError('这一题还没填写。可以回答，也可以明确跳过。');return;}setError('');setQuestionIndex(index+1);}
  return <dialog ref={dialog} className="supplement-dialog" aria-label="生成前补充问题" onCancel={e=>{e.preventDefault();invalidate();onClose();}}><header><h2>{conflict?'先确认这处信息':'再补几笔，让这封信更像你'}</h2><button type="button" className="text-button" onClick={()=>{invalidate();onClose();}}>返回修改</button></header>
+ {!conflict&&ids.length>0&&!ready&&<p className="supplement-progress" role="status">本组第 {index+1} / {ids.length} 题 · 已回答或跳过 {ids.length-unfinished.length} 题</p>}
  <div className="supplement-scroll" ref={group}>{conflict?<section><p>{conflict.question}</p>{conflict.evidence.map((e,i)=><blockquote key={i}>{e.text}</blockquote>)}{state.confirmations.length+Number(base.current.coreConfirmAttempts||0)>=2?<p role="alert">请返回修改原文，已填内容会保留。</p>:<><label className="field">你的确认<textarea value={confirmation} maxLength={500} onChange={e=>{invalidate();setConfirmation(e.target.value);}}/></label><button type="button" className="primary" disabled={busy||!confirmation.trim()} onClick={()=>{plan(recordSupplementConfirmation(current.current,confirmation));setConfirmation('');}}>确认并继续</button></>}</section>:<>
- {ids.map(id=>{const q=reviewedQuestionOptions(QUESTION_BY_ID[id],state.questionMeta?.[id]),a=q.scenario?{...fresh(),text:state.scenario?.answer||'',skipped:Boolean(state.scenario?.skipped)}:state.answers[id]||fresh();const title=questionTitle(q,state.questionMeta?.[id],background);
+ {visibleIds.map(id=>{const q=reviewedQuestionOptions(QUESTION_BY_ID[id],state.questionMeta?.[id]),a=questionAnswer(state,id);const title=questionTitle(q,state.questionMeta?.[id],background);
  return <section className="supplement-question" key={id}>{q.scenario&&<p className="small">假设情景 · {id} · 与真实经历无关。一句话也可以，也可以跳过。</p>}<h3>{title}</h3>{q.kind==='multi'&&<p className="small">可多选，最多{selectionLimit(q)}项，也可以自己补充。</p>}{q.kind!=='text'&&<div className="question-options">{[...q.options,'说不清／不愿透露'].map(option=><button type="button" key={option} aria-pressed={a.selected.includes(option)} onClick={()=>{const selected=toggleOption(q,a.selected,option);changeAnswer(id,{...a,selected,skipped:false,...(isUnknown(option)?{text:''}:{})});}}><span className="option-ink" aria-hidden="true"/><span className="option-check" aria-hidden="true">✓</span><span>{option}</span></button>)}</div>}
  <label className="field">{q.scenario?'在这个假设里，你会怎么回应？':q.kind==='text'?'一句话就好，也可以跳过':'自己说（可直接输入，也可补充选项）'}<textarea maxLength={500} rows={2} value={a.text} onChange={e=>changeAnswer(id,{...a,text:e.target.value,selected:a.selected.filter(x=>!isUnknown(x)),skipped:false})}/></label><button type="button" className="text-button" aria-pressed={a.skipped} onClick={()=>changeAnswer(id,{...a,skipped:!a.skipped})}>{a.skipped?'已跳过（点此恢复）':'跳过这一题'}</button></section>;})}
  {ready&&!busy&&<p role="status">已经可以开始写这封信了。</p>}
  {(!state.scenario||state.extra)&&<details className="supplement-extra"><summary>补充其他要求（选填）</summary><label className="field">有没有故事必须遵守、但前面没写到的事？<textarea rows={2} maxLength={500} value={state.extra} onChange={e=>edit({...current.current,extra:e.target.value})}/></label></details>}
  </>}{busy&&<div className="supplement-wait" role="status"><p><InkWait>{generating.current?'正在准备故事…':null}</InkWait></p>{!generating.current&&<p className="small">问题准备好后会显示在这里，非必填。</p>}{!generating.current&&progress&&!['还有些事想问问你…','正在读你写下的这些…','正在理解你的补充…'].includes(progress)&&<p className="small">{progress}</p>}</div>}{error&&<p role="alert">{error}</p>}</div>
  {!conflict&&<div className="am-followup-actions supplement-actions">
- {!busy&&(ready?<><button type="button" className="primary supplement-generate" disabled={generating.current} onClick={generate}>开始写故事</button><p className="small supplement-save-note">已填写的内容都会保留</p></>:<button type="button" className="primary supplement-generate" onClick={submitAnswers}>提交回答，继续</button>)}
+ {!busy&&(ready?<><button type="button" className="primary supplement-generate" disabled={generating.current} onClick={generate}>开始写故事</button><p className="small supplement-save-note">已填写的内容都会保留</p></>:<button type="button" className="primary supplement-generate" onClick={index<ids.length-1?nextQuestion:submitAnswers}>{index<ids.length-1?'下一题':'提交本组回答，继续'}</button>)}
+ {!ready&&index>0&&<button type="button" className="text-button" disabled={busy} onClick={()=>{setError('');setQuestionIndex(index-1);}}>上一题</button>}
  {(!ready||busy)&&<button type="button" className="text-button supplement-skip" disabled={generating.current} onClick={generate}>{busy?'跳过补充，开始写故事':'跳过剩余问题，开始写故事'}</button>}
  {state.page>0&&<button type="button" className="text-button" disabled={generating.current} onClick={()=>move(state.page-1)}>查看前面的回答</button>}
  {state.page<state.pages.length-1&&<button type="button" className="text-button" disabled={generating.current} onClick={()=>move(state.page+1)}>查看后面的回答</button>}

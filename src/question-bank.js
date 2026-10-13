@@ -342,8 +342,8 @@ export const QUESTION_BANK=[
       "我想先听听对方怎么想"
     ],
     "group": "focus",
-    "when": "明确假设由用户自己开口的沟通分叉；仅对方改变态度不适用",
-    "skip": "已明确谈话目的；改变行为的主体是对方而非用户；不是用户主动沟通的选择",
+    "when": "明确假设由用户自己开口的私人关系沟通分叉；客户咨询、职业服务或仅对方改变态度不适用",
+    "skip": "已明确谈话目的；客户咨询或职业服务不涉及私人关系；改变行为的主体是对方而非用户；不是用户主动沟通的选择",
     "purpose": "写入parallel.conversation_intent；决定先开口的话题，不预设对方理解、道歉或关系恢复"
   },
   {
@@ -474,4 +474,7 @@ QUESTION_BANK.push(...[{"id":"G15","question":"那时空下来，你更想？","
 QUESTION_BANK.push(...[{"id": "G19", "question": "那段时间，空下来你最常做的一件小事是什么？", "kind": "text", "options": [], "group": "personal-routine", "personalDetail": true, "when": "日常活动能与本次主题相关的动作衔接", "skip": "已有同类具体信息或跳过该维度就不问；G15与G19只在实际缺口不同且有新价值时另问，不为新鲜感重问", "purpose": "记录现实用户当时的具体回忆（未来设想参考现实现在）；保留原话，可用于相关动作、场景或表达，不推断未给前史、稳定人格或创作愿望"}, {"id": "G20", "question": "有没有一个你常去的地方？通常去那里做什么？", "kind": "text", "options": [], "group": "personal-place", "personalDetail": true, "when": "本次涉及日常空间或活动，且常去地点与行为未知", "skip": "已有同类具体信息或跳过该维度就不问；不为新鲜感重问", "purpose": "记录现实用户当时的具体回忆（未来设想参考现实现在）；保留原话，可用于相关动作、场景或表达，不推断未给前史、稳定人格或创作愿望"}, {"id": "G21", "question": "那时你和谁最常聊天？一般聊些什么？", "kind": "text", "options": [], "group": "personal-conversation", "personalDetail": true, "when": "本次涉及交流或关系，且对象和话题尚未说明", "skip": "已有同类具体信息或跳过该维度就不问；不为新鲜感重问", "purpose": "记录现实用户当时的具体回忆（未来设想参考现实现在）；保留原话，可用于相关动作、场景或表达，不推断未给前史、稳定人格或创作愿望"}, {"id": "G22", "question": "讲一件小事，让我们认识一下当时的你。好笑的、别扭的、普通的都可以。", "kind": "text", "options": [], "group": "personal-anecdote", "personalDetail": true, "when": "缺少能体现本人具体行为的小事，且与本次故事相关", "skip": "已有同类具体信息或跳过该维度就不问；不为新鲜感重问", "purpose": "记录现实用户当时的具体回忆（未来设想参考现实现在）；保留原话，可用于相关动作、场景或表达，不推断未给前史、稳定人格或创作愿望"}, {"id": "G23", "question": "那时候，你常说的一句话是什么？", "kind": "text", "options": [], "group": "personal-expression", "personalDetail": true, "when": "本人表达方式未知，且可自然用于本次相关对话", "skip": "已有同类具体信息或跳过该维度就不问；不为新鲜感重问", "purpose": "记录现实用户当时的具体回忆（未来设想参考现实现在）；保留原话，可用于相关动作、场景或表达，不推断未给前史、稳定人格或创作愿望"}]);
 for(const q of QUESTION_BANK)q.answerKind=q.id==='G08'||q.personalDetail?'real_behavior':['G04','G07','S02','W01','W03','M01','M02','R01','R04','R05','I02'].includes(q.id)?'creative_preference':'user_answer';
 for(const q of QUESTION_BANK)if(q.kind==='multi')q.maxSelections=['W02','W01','G06'].includes(q.id)?2:Math.min(4,q.options.length);
+// Retired questions remain readable in historical answers, but are never offered again.
+export const RETIRED_QUESTION_IDS=['G07','G12','G14'];
+export const ACTIVE_QUESTION_BANK=QUESTION_BANK.filter(q=>!RETIRED_QUESTION_IDS.includes(q.id));
 export const QUESTION_BY_ID=Object.fromEntries(QUESTION_BANK.map(q=>[q.id,q]));

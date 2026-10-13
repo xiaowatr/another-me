@@ -7,11 +7,11 @@ export async function callChatWithRetry(caller,messages,options){
  for(let attempt=1;attempt<=CHAT_MAX_CALLS;attempt++){
   if(options.signal?.aborted)throw new AppError('stopped');
   const parentRequestId=requestId;
-  try{return await caller.call('chat',messages,{...options,chatAttempt:attempt,parentRequestId,requireStructuredChat:attempt===1,onStart:id=>{requestId=id;options.onStart?.(id);},onText:text=>{shown+=text.length;options.onText(text);}});}
+  try{return await caller.call('chat',messages,{...options,chatAttempt:attempt,parentRequestId,plainChatReply:true,requireStructuredChat:false,onStart:id=>{requestId=id;options.onStart?.(id);},onText:text=>{shown+=text.length;options.onText(text);}});}
   catch(error){
    const reason=error.diagnostic?.reason;
    const protocol=error.category==='invalid_response'&&error.diagnostic?.stage==='parse'&&(reason==='chat_envelope'||/^chat_tool_[a-z_]+$/.test(reason||''));
-   if(attempt===CHAT_MAX_CALLS||shown||!protocol||options.signal?.aborted)throw error;
+   if(attempt===CHAT_MAX_CALLS||shown||error.replyReceived||!protocol||options.signal?.aborted)throw error;
   }
  }
 }

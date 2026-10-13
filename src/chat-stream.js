@@ -10,7 +10,7 @@ export function takeMessage(buffer,final=false){
  if(final)return [buffer,''];
  return ['',buffer];
 }
-export const messageDelay=text=>Math.min(3000,1000+text.length*22);
+export const messageDelay=text=>Math.min(350,120+text.length*1.5);
 export function appendBubble(messages,piece,turnId,bubbleIds){
  if(bubbleIds.length>=4 || (!piece.trim() && bubbleIds.length)){const id=bubbleIds.at(-1);return messages.map(m=>m.id===id?{...m,text:m.text+piece}:m);}
  if(!piece.trim())return messages;
