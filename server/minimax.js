@@ -35,6 +35,7 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
     const model=task==='memory'?(config.memoryModel||'MiniMax-M3'):config.model;const trace=activeStoryTrace();const started = Date.now();
     const record = { operationId:trace?.record.operationId||options.chatOperationId||null,parentTaskId:trace?.record.parentTaskId||null,attempt:trace?.record.attempt||(task==='chat'?options.chatAttempt:null)||null,codeVersion:CODE_VERSION,actualModel:null,failureStage:null,failureReason:null,requestedRange:options.diagnosticRange?{months:options.diagnosticRange.months,anchor:options.diagnosticRange.anchor,precision:options.diagnosticRange.precision,start:options.diagnosticRange.start,end:options.diagnosticRange.end}:null, requestId: randomUUID(), time: new Date().toISOString(), task, model, promptVersion: task==='memory'?MEMORY_PROMPT_VERSION:task==='questions'?PLANNER_VERSION:PROMPT_VERSION, durationMs: 0, success: false, errorCategory: null, inputTokens: null, outputTokens: null, totalTokens: null, sent: false, site:config.site, usageSource:null, cachedTokens:null, auditGroup:options.auditGroup || null, status:'pending',parentRequestId:options.parentRequestId||null };
     if(task==='memory')record.memoryBatchId=options.memoryBatchId||null;
+    if(options.chatRewrite==='direct_echo')record.chatRewrite='direct_echo';
     let phaseStart=started;record.phaseMs={};const stage=name=>{if(record.stage)record.phaseMs[record.stage]=(record.phaseMs[record.stage]||0)+Date.now()-phaseStart;record.stage=name;phaseStart=Date.now();};
     if(options.diagnosticClock){const c=options.diagnosticClock;record.clock={asOf:/^\d{4}-\d{2}-\d{2}$/.test(c.asOf)?c.asOf:null,startYear:Number.isInteger(c.startYear)?c.startYear:null,startMonth:Number.isInteger(c.startMonth)?c.startMonth:null};}
     record.build={commit:/^[a-f0-9]{40}$/.test(process.env.RENDER_GIT_COMMIT||'')?process.env.RENDER_GIT_COMMIT:null};
@@ -48,7 +49,7 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       fs.appendFileSync(auditPath,JSON.stringify(record)+'\n');emit(record);
       const noThinking=task==='memory'||task==='questions'||task==='chat';
       record.thinking=noThinking?'disabled':task==='story'?(config.storyThinking||'disabled'):'unchanged';
-      record.maxCompletionTokens=options.repairFields?1200:task==='memory'?(config.memoryMaxTokens||2000):task==='story'?6000:3500;
+      record.maxCompletionTokens=options.chatRewrite?800:options.repairFields?1200:task==='memory'?(config.memoryMaxTokens||2000):task==='story'?6000:3500;
       const transportTools=task==='story'?(options.repairFields?fieldRepairTools(options.repairFields,messages):storyTools(messages)):task==='questions'&&options.questionStage?questionTools(options.questionStage):null;
       if(task==='questions')record.questionStage=options.questionStage||null;
       if(options.repairFields)record.repairFields=options.repairFields;

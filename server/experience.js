@@ -1,6 +1,7 @@
 import {guardExperience,assertSafe} from './content-safety.js';
 import {validateUserProfile} from './user-profile.js';
 import {callChatWithRetry} from './chat-retry.js';
+import {rewriteDirectEchoes} from './chat-echo.js';
 import {normalizeChatMemory} from './chat-memory.js';
 import {chooseStoryPool} from './story-pool.js';
 import {directBeijingReply} from './realtime-context.js';
@@ -85,11 +86,12 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       emit({type:'start',turnId:p.id,corrections:s.corrections});
       let buffered='';
       const forward=text=>{assertSafe(text);text=qualifyCurrentAge(rolePresentation(readableText(text),s.background),s.background,s.story);const risks=inspectFactText(text,s.background,{memories:s.memories,anchorYear:storyClock(s.background,s.story).year});if(risks.length)throw new AppError('background_conflict',422,{stage:'business',reason:risks[0]});checkChatGrounding(text,s.background,s.memories || [],JSON.stringify({story:s.story,roleRecords:s.roleRecords,fiction:s.memories.filter(m=>m.type==='fiction')}),recallTarget(message));p.text+=text;emit({type:'text',text});};
-      const onText=text=>{buffered+=text;let match;while((match=/[。！？!?\n]/.exec(buffered))){const end=match.index+1;const sentence=buffered.slice(0,end);buffered=buffered.slice(end);forward(sentence);}};
+      const onText=text=>{buffered+=text;};
       const clockReply=intent==='chat'?directBeijingReply(message):null;
-      const response=clockReply?{result:{reply:clockReply}}:config.mode==='demo'?{result:{reply:await demoProvider.reply({turn:s.history.length/2})}}:await callChatWithRetry(caller,streamingChatMessages(s,message,intent,new Date(),input.messageId||p.id),{onText,chatEnvelope:true,chatOperationId:p.id,validateResult:()=>{if(buffered){forward(buffered);buffered='';}},onStart:requestId=>emit({type:'request',requestId}),signal:AbortSignal.any([signal,controller.signal])});
-      if(clockReply||config.mode==='demo')onText(response.result.reply);
-      if(buffered)forward(buffered);
+      const response=clockReply?{result:{reply:clockReply}}:config.mode==='demo'?{result:{reply:await demoProvider.reply({turn:s.history.length/2})}}:await callChatWithRetry(caller,streamingChatMessages(s,message,intent,new Date(),input.messageId||p.id),{onText,chatEnvelope:true,chatOperationId:p.id,validateResult:()=>{},onStart:requestId=>emit({type:'request',requestId}),signal:AbortSignal.any([signal,controller.signal])});
+      if(!clockReply&&config.mode!=='demo')response.result.reply=(await rewriteDirectEchoes(caller,{reply:response.result.reply,currentMessage:message,history:s.history,signal:AbortSignal.any([signal,controller.signal]),parentRequestId:response.requestId})).reply;
+      buffered='';onText(response.result.reply);
+      if(buffered){forward(buffered);buffered='';}
       emit({type:'memory',...normalizeChatMemory(response.result,s,message,input.messageId||p.id,p.id)});
       emit({type:'done',requestId:response.requestId});
       return {requestId:response.requestId};
@@ -131,6 +133,7 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       const pending = intent === 'chat' ? [] : [{ type: intent, text: message.trim() }];
       const clockReply=intent==='chat'?directBeijingReply(message):null;
       const response = clockReply ? {result:{reply:clockReply}} : config.mode === 'demo' ? { result: { reply: await demoProvider.reply({ turn: s.history.length / 2 }), updateType: intent === 'chat' ? 'none' : intent } } : await caller.call('chat', chatMessages({ ...s, corrections: [...s.corrections, ...pending] }, message.trim(), intent));
+      if(!clockReply&&config.mode!=='demo')response.result.reply=(await rewriteDirectEchoes(caller,{reply:response.result.reply,currentMessage:message.trim(),history:s.history,parentRequestId:response.requestId})).reply;
       response.result.reply=qualifyCurrentAge(rolePresentation(readableText(response.result.reply),s.background),s.background,s.story);
       const risks=inspectFactText(response.result.reply,s.background,{memories:s.memories,anchorYear:storyClock(s.background,s.story).year});
       if(risks.length)throw new AppError('background_conflict',422,{stage:'business',reason:risks[0]});
