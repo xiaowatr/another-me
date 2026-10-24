@@ -72,3 +72,18 @@ tests/*
 !tests/sequential113.test.js
 
 !tests/request114.test.js
+
+# Synthetic default-question confirmation and recovery regression.
+!tests/critical-confirmation159.test.js
+
+# Canonical project documentation and synthetic v160 regressions.
+!docs/FEATURES.md
+!docs/CHANGELOG.md
+!docs/RELEASE_NOTES.md
+!docs/METHODOLOGY.md
+!tests/pronoun-diagnostics160.test.js
+!tests/input-guidance161.test.js
+!tests/frequency162.test.js
+
+# Local evaluation sources, judgments and frozen code snapshots.
+evaluations/story_constraints/

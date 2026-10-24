@@ -1,3 +1,4 @@
+import {publicInputIssues} from './story-delivery-diagnostics.js';
 import {guardExperience,assertSafe} from './content-safety.js';
 import {validateUserProfile} from './user-profile.js';
 import {callChatWithRetry} from './chat-retry.js';
@@ -105,14 +106,19 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       if(input.clarification)background=validateBackground(migrateBackground(applyClarification({...background,followupKey:hardConflicts(background).length?'hard-conflict':background.followupKey||'model',followupAnswer:input.clarification,followupSkipped:''})),{newSubmission:true});
       const hard=hardConflicts(background);if(hard.length)return {kind:'clarification',hard:true,question:hard.map(h=>h.question+'（'+h.sources.join(' / ')+'）').join('；')+' 可修改原输入，或回答“现实：…”“假设：…”',mode:config.mode};
       const conflicts=inputConflicts(background);if(conflicts.length){return {kind:'clarification',hard:true,question:'想确认一下：'+conflicts.join('；')+'？',mode:config.mode};}
-      const effective=compileSetting(background);effective.originalInput={...input.background};if(effective.clarifications.length){if(input.clarificationSkipped)throw new AppError('input_conflict',422);return {kind:'clarification',question:effective.clarifications.join('；'),mode:config.mode};}
+      const effective=compileSetting(background);effective.originalInput={...input.background};if(effective.clarifications.length){
+        const trace=activeStoryTrace(),diagnostic={stage:'input_validation',reason:'unresolved_setting',issues:effective.clarificationIssues};
+        if(trace){trace.record.inputValidation=diagnostic;trace.mark('input_clarification_required');}
+        if(input.clarificationSkipped)throw new AppError('input_conflict',422,diagnostic);
+        return {kind:'clarification',question:effective.clarifications.join('；'),mode:config.mode,requestId:trace?.record.requestId,inputIssues:publicInputIssues(diagnostic)};
+      }
       onSetting?.(effective);
       activeStoryTrace()?.mark('input_compiled');
       const response=config.mode==='demo'?{result:{...demoStory,kind:'story',character:demoStory.intro,opening:'【固定演示开场】刚刚关了书店，你想聊些什么？'}}:await chooseStoryPool({caller,messages:storyMessages(background,input.clarification||'',!input.clarificationSkipped,effective),background,effectiveSetting:effective,signal,onDraft,state:poolState});
       activeStoryTrace()?.mark('model_parse_validation_completed');
       response.result=readableResult(response.result);if(response.result.kind==='story')response.result=presentNewStory(response.result,background);
       if(response.result.kind==='story')response.result.openingVersion=2;
-      if (response.result.kind === 'clarification') return { ...response.result, question:publicQuestion(response.result.question), mode: config.mode, requestId: response.requestId };
+      if (response.result.kind === 'clarification') return { ...response.result, postGeneration:true, question:publicQuestion(response.result.question), mode: config.mode, requestId: response.requestId };
       const id = randomUUID();
       // 成功重生成才替换旧会话，失败仍保留原故事。设置独立角色和空历史。
       if (input.previousSessionId&&sessions.get(input.previousSessionId)?.owner===currentOwner()) sessions.delete(input.previousSessionId);

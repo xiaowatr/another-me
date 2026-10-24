@@ -17,7 +17,7 @@ export const errorMessages = {
   task_missing: '未找到可恢复的任务，可能已过期或服务已重启。草稿仍保留。',
   task_expired: '服务已重启，原任务无法恢复。草稿仍保留，请确认后重新生成。',
   task_input_changed: '还有另一份填写内容正在生成，请先恢复或取消它。',
-  input_conflict: '人物的位置还有相互矛盾的描述，请改清楚后再生成。',
+  input_conflict: '还有需要确认的故事设定，已填内容会保留。请核对后再生成。',
   background_conflict: '这次故事有些内容与设定不一致，没能生成成功。你填写的内容还在，可以重试。',
   stopped: '本轮回复已停止，未展示内容不会进入后续对话。',
   configuration: '服务配置有误，请检查本地密钥、国内/国际站和模型配置后重启。',

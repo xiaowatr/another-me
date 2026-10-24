@@ -1,14 +1,37 @@
 // Small contextual text-question slots, sharing the existing pages/answers/eight-question budget.
 export const KEY_QUESTION_BY_ID=Object.fromEntries(Array.from({length:8},(_,i)=>{const id='K'+(i+1);return [id,{id,question:'请补充这次选择所需的这处背景。',kind:'text',options:[],group:'critical:'+id,purpose:'仅澄清本次故事的关键背景；未答保持未知'}];}));
 const bounded=(s,n)=>typeof s==='string'&&s.trim()&&s.length<=n;
-export function validCriticalGap(g){return g&&/^[a-z][a-z0-9_-]{0,47}$/.test(g.key||'')&&bounded(g.missingInformation,200)&&bounded(g.whyMissing,200)&&bounded(g.useInStory,240)&&bounded(g.sourceId,80)&&bounded(g.evidence,500)&&(!g.questionText||bounded(g.questionText,180))&&(!g.questionId||KEY_QUESTION_BY_ID[g.questionId]||/^[A-Z][0-9]{2}$/.test(g.questionId))&&(!g.blocksStory||g.blocksStory==='actor_or_choice');}
+export const ACTOR_CHOICE_QUESTION='请说明这次故事以谁为主角，以及要改变谁的哪件事。';
+export function criticalGapQuestion(g){return g?.questionText||(g?.blocksStory==='actor_or_choice'?ACTOR_CHOICE_QUESTION:'');}
+// Recover only the old default-question linking defect, within an unchanged input scope.
+// A real conflict, ambiguous gaps or existing links must never be auto-confirmed.
+export function restoreCriticalConfirmationLinks(state){
+ const conflict=state.plan?.conflict;
+ if(conflict?.kind!=='critical_background'||conflict.question!==ACTOR_CHOICE_QUESTION)return state;
+ const gaps=state.criticalUnknowns?.length?state.criticalUnknowns:state.plan?.criticalUnknowns||[];
+ const matching=gaps.filter(g=>g.blocksStory==='actor_or_choice'&&!g.questionText&&conflict.evidence?.some(e=>e.sourceId===g.sourceId&&e.text===g.evidence));
+ if(matching.length!==1)return state;
+ let changed=false;
+ const confirmationContexts=(state.confirmationContexts||[]).map(c=>{
+  if(c.question!==ACTOR_CHOICE_QUESTION||!Array.isArray(c.gapKeys)||c.gapKeys.length||!Number.isInteger(c.sourceIndex)||!state.confirmations?.[c.sourceIndex]?.trim())return c;
+  changed=true;return {...c,gapKeys:[matching[0].key]};
+ });
+ return changed?{...state,confirmationContexts}:state;
+}
+export function validCriticalGap(g){return g&&/^[a-z][a-z0-9_-]{0,47}$/.test(g.key||'')&&bounded(g.missingInformation,200)&&bounded(g.whyMissing,200)&&bounded(g.useInStory,240)&&bounded(g.sourceId,80)&&bounded(g.evidence,500)&&(!g.questionText||bounded(g.questionText,180))&&(!g.questionId||KEY_QUESTION_BY_ID[g.questionId]||/^[A-Z][0-9]{2}$/.test(g.questionId))&&(!g.blocksStory||g.blocksStory==='actor_or_choice')&&(!g.kind||g.kind==='address_preference')&&(!g.person||bounded(g.person,40))&&!(g.kind==='address_preference'&&g.blocksStory);}
 export function mergeCriticalGaps(existing,incoming,sources){
  const map=new Map(sources.map(x=>[x.id,String(x.text)])),items=new Map();
  for(const g of [...(Array.isArray(existing)?existing:[]),...(Array.isArray(incoming)?incoming:[])]){
   if(!validCriticalGap(g)||!map.get(g.sourceId)?.includes(g.evidence))continue;
   const old=items.get(g.key);if(!old&&items.size>=8)continue;
+  const address=g.kind==='address_preference'||old?.kind==='address_preference';
+  const person=g.person||old?.person;
+  if(old?.kind==='address_preference'&&old.questionId&&person!==old.person)continue;
+  if(address&&(!bounded(person,40)||!map.get(g.sourceId)?.includes(person)))continue;
   const resolution=g.resolvedBy&&bounded(g.resolvedBy.evidence,500)&&map.get(g.resolvedBy.sourceId)?.includes(g.resolvedBy.evidence)?{sourceId:g.resolvedBy.sourceId,evidence:g.resolvedBy.evidence}:undefined;
-  const next={key:g.key,missingInformation:g.missingInformation,whyMissing:g.whyMissing,useInStory:g.useInStory,sourceId:g.sourceId,evidence:g.evidence,...(g.questionText?{questionText:g.questionText}:{}),...(g.questionId?{questionId:g.questionId}:{}),...(g.blocksStory?{blocksStory:g.blocksStory}:{})};
+  const questionText=g.questionText||old?.questionText||criticalGapQuestion(g);
+  const next={key:g.key,missingInformation:g.missingInformation,whyMissing:g.whyMissing,useInStory:g.useInStory,sourceId:g.sourceId,evidence:g.evidence,...(questionText?{questionText}:{}),...(g.questionId?{questionId:g.questionId}:{}),...(g.blocksStory?{blocksStory:g.blocksStory}:{})};
+  if(address){next.kind='address_preference';next.person=person;delete next.blocksStory;next.questionText='希望把'+person+'称呼为“他”还是“她”？也可以沿用姓名或关系称谓。';}
   if(old?.questionId){next.questionId=old.questionId;next.questionText=old.questionText;}
   if(resolution)next.resolvedBy=resolution;else if(old?.resolvedBy&&map.get(old.resolvedBy.sourceId)?.includes(old.resolvedBy.evidence))next.resolvedBy=old.resolvedBy;items.set(g.key,next);
  }return [...items.values()];
@@ -17,7 +40,7 @@ export function criticalGapStatus(g,state,answerText,isUnknown){
  const a=g.questionId&&state.answers?.[g.questionId],text=answerText(a);
  if(a?.skipped||isUnknown(text))return {...g,status:'skipped',asked:Boolean(state.shown?.includes(g.questionId)),answer:null};
  if(text)return {...g,status:'answered',asked:true,answer:{questionId:g.questionId,text,selected:a.selected||[],answerContext:state.answerScopes?.[g.questionId]||null}};
- const confirmed=(state.confirmationContexts||[]).find(x=>x.gapKeys?.includes(g.key)&&x.question===g.questionText),index=confirmed?.sourceIndex;
+ const confirmed=(state.confirmationContexts||[]).find(x=>x.gapKeys?.includes(g.key)&&x.question===criticalGapQuestion(g)),index=confirmed?.sourceIndex;
  if(confirmed&&Number.isInteger(index)&&state.confirmations?.[index]?.trim()&&!isUnknown(state.confirmations[index]))return {...g,status:'answered',asked:true,answer:{sourceId:'confirmation:'+index,text:state.confirmations[index]}};
  if(g.resolvedBy)return {...g,status:'unconfirmed',asked:Boolean(state.shown?.includes(g.questionId)),answer:null};
  return {...g,status:state.plan?.optionalAnalysisUnavailable?'analysis_unavailable':state.skippedRemaining?'skipped':state.shown?.includes(g.questionId)?'unanswered':'unasked',asked:Boolean(state.shown?.includes(g.questionId)),answer:null};

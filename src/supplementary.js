@@ -2,7 +2,7 @@ import {questionMeaning} from './question-meaning.js';
 import {validSelections,reviewedQuestionOptions} from './question-options.js';
 import {activeReusedAnswers,reuseProvenance,activeReuseEntries} from './history-reuse-data.js';
 import {LIFE_BACKGROUND_FIELDS,lifeBackgroundEntries} from './life-background.js';
-import {KEY_QUESTION_BY_ID,validCriticalGap,settingRecord} from './critical-background.js';
+import {KEY_QUESTION_BY_ID,validCriticalGap,settingRecord,criticalGapQuestion,criticalGapStatus,restoreCriticalConfirmationLinks} from './critical-background.js';
 import {questionTime,questionTitle} from './question-context.js';
 import {SCENARIO_BY_ID} from './scenario-bank.js';
 import {scenarioReferences} from './scenario-context.js';
@@ -15,12 +15,17 @@ const baseFields=['realityOutcome','hypotheticalDirection','birthYear','forkAge'
 export function supplementKey(b){const extra=[...LIFE_BACKGROUND_FIELDS,'additionalInfo','historyReuse'].filter(k=>b[k]).map(k=>[k,b[k]]);const text=JSON.stringify([...baseFields.map(k=>b[k]||''),...(extra.length?[extra]:[])]);let a=2166136261,c=5381;for(const x of text){a=Math.imul(a^x.charCodeAt(0),16777619);c=Math.imul(c,33)^x.charCodeAt(0);}return (a>>>0).toString(16)+(c>>>0).toString(16);}
 const blank=()=>({shown:[],answers:{},pages:[],page:0,questionMeta:{},criticalUnknowns:[],confirmations:[],extra:'',plan:null,scenario:null,recentScenarios:[]});
 function envelope(b){try{const x=JSON.parse(b.supplementary||'{}');return x&&Array.isArray(x.contexts)?x:{contexts:[]};}catch{return {contexts:[]};}}
-export function supplementState(b){const contexts=envelope(b).contexts,exact=contexts.find(x=>x.key===supplementKey(b));if(exact)return exact.state;if(b.followupKey==='model'&&b.followupQuestion){const basis=supplementKey({...b,followupAnswer:''}),carried=contexts.find(x=>x.basis===basis||x.key===basis);if(carried)return {...carried.state,...(carried.state.scenario?{scenario:{...carried.state.scenario,analysis:null}}:{})};}return {...blank(),recentScenarios:contexts[0]?.state?.recentScenarios||[]};}
+export function supplementState(b){const contexts=envelope(b).contexts,exact=contexts.find(x=>x.key===supplementKey(b));if(exact)return restoreCriticalConfirmationLinks(exact.state);if(b.followupKey==='model'&&b.followupQuestion){const basis=supplementKey({...b,followupAnswer:''}),carried=contexts.find(x=>x.basis===basis||x.key===basis);if(carried)return restoreCriticalConfirmationLinks({...carried.state,...(carried.state.scenario?{scenario:{...carried.state.scenario,analysis:null}}:{})});}return {...blank(),recentScenarios:contexts[0]?.state?.recentScenarios||[]};}
 export function saveSupplement(b,state){const key=supplementKey(b),old=envelope(b);return {...b,supplementary:JSON.stringify({contexts:[{key,basis:supplementKey({...b,followupAnswer:''}),state},...old.contexts.filter(x=>x.key!==key)].slice(0,3)})};}
 export function recordSupplementConfirmation(state,text){
  const answer=text.trim(),conflict=state.plan?.conflict,gaps=state.criticalUnknowns?.length?state.criticalUnknowns:state.plan?.criticalUnknowns||[];
- const gapKeys=conflict?.kind==='critical_background'?gaps.filter(g=>g.questionText===conflict.question).map(g=>g.key):[];
+ const gapKeys=conflict?.kind==='critical_background'?gaps.filter(g=>criticalGapQuestion(g)===conflict.question).map(g=>g.key):[];
  return {...state,confirmations:[...state.confirmations,answer],confirmationContexts:[...(state.confirmationContexts||[]),{sourceIndex:state.confirmations.length,question:conflict?.question||'',gapKeys}].slice(0,2)};
+}
+export function canRecheckConfirmedConflict(state){
+ const conflict=state.plan?.conflict;if(conflict?.kind!=='critical_background')return false;
+ const gaps=(state.criticalUnknowns?.length?state.criticalUnknowns:state.plan?.criticalUnknowns||[]).filter(g=>g.blocksStory==='actor_or_choice'&&criticalGapQuestion(g)===conflict.question&&conflict.evidence?.some(e=>e.sourceId===g.sourceId&&e.text===g.evidence));
+ return gaps.length===1&&criticalGapStatus(gaps[0],state,answerText,unknownAnswer).status==='answered';
 }
 export function answerText(a){if(!a||a.skipped)return '';return [...(a.selected||[]).filter(x=>x!=='自己定起止时间'),a.text||''].filter(Boolean).join('；');}
 export function supplementSources(b){const s=supplementState(b);return [...[...baseFields,'lifeStatus','relatedExperience'].map(id=>({id,text:b[id]||'',...reuseProvenance(b,id),...(lifeBackgroundEntries(b).find(e=>e.field===id)?{actor:'real_user',timeScope:lifeBackgroundEntries(b).find(e=>e.field===id).timeScope}:{})})),...Object.entries(s.answers).filter(([id,a])=>ORDINARY_BY_ID[id]&&answerText(a)).map(([id,a])=>({id,text:answerText(a),question:questionTitle(QUESTION_BY_ID[id],s.questionMeta?.[id],b),timeScope:s.answerScopes?.[id]?.timeScope||questionTime(b),actor:'real_user'})),...activeReusedAnswers(b).map(a=>({id:a.id,text:[...a.selected,a.text].filter(Boolean).join('；'),question:a.question,actor:'real_user',timeScope:a.sourceTime,origin:{lifeId:a.lifeId,node:a.sourceNode,context:a.sourceContext,questionId:a.questionId,question:a.question},applicability:{confirmed:true,meaning:'已核对适用于本次，不改写原时间'}})),...(s.confirmations||[]).map((text,i)=>({id:'confirmation:'+i,text})),{id:'extra',text:s.extra||''}].filter(x=>x.text);}
