@@ -15,7 +15,7 @@ export function compileSetting(input){
  const prior=real.match(/^(?:现实中)?(.{1,12}?)(?:那次|当时)([^，。；]+)/);
  let operation=explicitPair?'replace':replacement?'replace':addition?'add':/仅改变|只改变|只改/.test(direction)?'change':/^(?:保留|维持)/.test(direction)?'preserve':'unknown';
  const personal=supplementaryContext(b);
- const issues=[],clarificationIssues=[];const unresolvedActor=personal.settingRecord.criticalBackground.find(g=>g.blocksStory==='actor_or_choice'&&g.status!=='answered');if(unresolvedActor){issues.push(unresolvedActor.questionText||'请说明这次故事以谁为主角，以及要改变谁的哪件事。');clarificationIssues.push({code:'unresolved_actor_or_choice',status:unresolvedActor.status,fields:['realityOutcome','hypotheticalDirection','details','choiceReason','additionalInfo'].includes(unresolvedActor.sourceId)?[unresolvedActor.sourceId]:[]});}if(replacement&&addition){issues.push('这次是替换原来的结果，还是两个人都经历这件事？');clarificationIssues.push({code:'conflicting_change_operation',fields:['hypotheticalDirection']});}
+ const issues=[],clarificationIssues=[];if(replacement&&addition){issues.push('这次是替换原来的结果，还是两个人都经历这件事？');clarificationIssues.push({code:'conflicting_change_operation',fields:['hypotheticalDirection']});}
  if(replacement&&!prior&&!explicitPair){issues.push('这次要替换谁原来的结果？请在现实经过中写清人物和那次发生的事。');clarificationIssues.push({code:'replacement_target_missing',fields:['realityOutcome','hypotheticalDirection']});}
  const facts=[];
  if(explicitPair){facts.push({subject:'我',predicate:exclusive[1],polarity:true,source:source('hypotheticalDirection',exclusive[0])},{subject:excluded[1],predicate:exclusive[1],polarity:false,source:source('hypotheticalDirection',excluded[0])});}

@@ -1,3 +1,4 @@
+import {internalTimelineEnabled} from './internal-timeline.js';
 import {assertSafe,SAFETY_RULE} from './content-safety.js';
 import {transportError} from './transport-error.js';
 import {plainChatContent} from './chat-content.js';
@@ -114,11 +115,13 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
         content=calls[0].function.arguments;try{strictJson(content);}catch(e){throw new AppError('invalid_response',502,{stage:'schema',reason:e.message.startsWith('duplicate_field:')?'duplicate_field':'invalid_tool_json'});}record[task==='questions'?'questionTransport':'storyTransport']='tool_arguments';
       }else {if(calls?.length)throw new AppError('invalid_response',502,{stage:'finish',reason:'unexpected_tool_finish'});record[task==='questions'?'questionTransport':'storyTransport']=transportTools?'content_json':null;}
       record.outputEvidence={length:typeof content==='string'?content.length:null,sha256:typeof content==='string'?createHash('sha256').update(content).digest('hex'):null};
+      let internalTimeline=null,internalTimeDiagnostics=[];
       if(transportTools){
         const received=task==='questions'?receiveQuestionResult(content,transportTools,options.questionStage,record.parsing):receiveStructured(content,task,transportTools,messages,record.parsing);
         record.schemaValidation={valid:received.errors.length===0,errors:received.errors.slice(0,60),repairs:received.repairs};
         if(received.errors.length){throw new AppError('invalid_response',502,{stage:'schema',reason:'structured_schema',field:received.errors[0].path});}
         if(task==='story'&&!options.repairFields&&storyRequestInput(messages).generationStage==='body'&&received.data.kind==='story'){fillChapterTimes(received.data,storyRequestInput(messages).effectiveSetting);received.data=fillStoryMetadata(received.data,storyRequestInput(messages).effectiveSetting);record.programFilledChapterTimes=true;record.programFilledStoryMetadata=true;}
+        if(task==='story'&&!options.repairFields&&received.data.kind==='story'&&internalTimelineEnabled(storyRequestInput(messages).effectiveSetting)){internalTimeline=received.internalTimeline;internalTimeDiagnostics=received.internalTimeDiagnostics||[];record.internalTimeDiagnostics=internalTimeDiagnostics;}
         content=JSON.stringify(received.data);
       }
       const normalizedParsing=transportTools?{}:record.parsing;
@@ -130,7 +133,7 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       stage('business');
       options.validateResult?.(result);
       record.success = true;stage('complete');
-      return { result, requestId: record.requestId };
+      return { result, requestId: record.requestId, ...(internalTimeline?{internalTimeline,internalTimeDiagnostics}:{} ) };
     } catch (error) {
       const transport=!(error instanceof AppError)?transportError(error):null;
       if(transport&&!options.signal?.aborted)record.transportError={kind:transport.kind,codes:transport.codes,retryable:transport.retryable};

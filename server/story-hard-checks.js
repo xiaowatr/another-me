@@ -1,3 +1,5 @@
+import {narrativeTimeIssues} from './narrative-time.js';
+import {generationInput} from './generation-input.js';
 import {storyOutputIssues} from './story-output-checks.js';
 import {openingAddresseeConflict} from '../src/participant-identity.js';
 import {settingIssues} from '../src/effective-setting.js';
@@ -6,7 +8,7 @@ import {reviewStory} from '../src/fact-frame.js';
 import {frequencyProof,frequencyRule} from './frequency-proof.js';
 // Keep existing program checks and direct count proofs. No model reports or scores.
 export function hardStoryIssues(story,background,c){
- const issues=[...(story.scenes?.length===3?[]:[{field:'scenes',reason:'chapter_count',actualCount:story.scenes?.length,minCount:3,maxCount:3}]),...storyOutputIssues(story,background),...settingIssues(story,c)];
+ const issues=[...narrativeTimeIssues(story,generationInput(c)),...(story.scenes?.length===3?[]:[{field:'scenes',reason:'chapter_count',actualCount:story.scenes?.length,minCount:3,maxCount:3}]),...storyOutputIssues(story,background),...settingIssues(story,c)];
  if(openingAddresseeConflict(story.opening,background))issues.push({field:'opening',reason:'opening_addressee_conflict'});
  try{checkStoryGrounding(story,background,c.temporal);}catch(e){issues.push(e.diagnostic||{reason:e.category});}
  for(const issue of reviewStory(story,background,[],{strictTime:true}).issues)issues.push({field:issue.field,reason:issue.reasons[0]});

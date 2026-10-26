@@ -1,3 +1,4 @@
+import {unsupportedQuestionReason} from '../src/question-premises.js';
 import {questionInput} from './question-input.js';
 import {QUESTION_COMMON_RULES,QUESTION_SELECTION_TASK} from './question-prompts.js';
 import {assertQuestionIds} from './question-contract.js';
@@ -18,7 +19,7 @@ import {supplementState,supplementSources,answerText,unknownAnswer,validateSuppl
 import {timeAnchors} from '../src/input-anchors.js';
 import {reviewedQuestionOptions} from '../src/question-options.js';
 import {AppError} from './core.js';
-export const PLANNER_VERSION='questions-v24';
+export const PLANNER_VERSION='questions-v25';
 export function plannerMessages(background){const state=supplementState(background),payload=questionInput(background);
  Object.assign(payload,{bank:modelQuestionBank(),scenarioBank:state.scenario?[]:SCENARIO_BANK,scenario:state.scenario?{id:state.scenario.id,question:SCENARIO_BY_ID[state.scenario.id]?.question,answer:state.scenario.answer,skipped:state.scenario.skipped}:null,recentScenarios:state.recentScenarios||[]});
  if(state.scenario?.answer?.trim()&&!state.scenario.skipped)payload.behaviorVocabulary=BEHAVIOR;
@@ -31,8 +32,7 @@ export function normalizePlan(raw,b,{addCriticalQuestions=true}={}){
  const groups=new Set([...blocked].map(id=>QUESTION_BY_ID[id]?.group));const questions=[];for(const id of RETIRED_QUESTION_IDS)blocked.add(id);const detailCount=s.shown.filter(id=>QUESTION_BY_ID[id]?.personalDetail).length;
  const criticalUnknowns=mergeCriticalGaps(s.criticalUnknowns?.length?s.criticalUnknowns:s.plan?.criticalUnknowns,raw.criticalUnknowns,supplementSources(b));
  const unresolved=criticalUnknowns.filter(g=>criticalGapStatus(g,s,answerText,unknownAnswer).status!=='answered');
- const coreGap=unresolved.find(g=>!g.resolvedBy&&g.blocksStory==='actor_or_choice');
- if(addCriticalQuestions&&!coreGap&&!s.scenario&&!policy.currentGroupSkipped&&policy.remaining>0){const gap=unresolved.find(g=>!g.resolvedBy&&!covered.some(x=>x.id===g.questionId)&&g.questionText&&criticalGapStatus(g,s,answerText,unknownAnswer).status!=='skipped'&&!s.shown.includes(g.questionId));if(gap){let id=gap.questionId;if(!id)id=Object.keys(KEY_QUESTION_BY_ID).find(k=>!s.shown.includes(k)&&!criticalUnknowns.some(x=>x.questionId===k));if(id&&QUESTION_BY_ID[id]&&!RETIRED_QUESTION_IDS.includes(id)){gap.questionId=id;questions.push({id,reason:gap.whyMissing,questionText:gap.questionText,informationGain:3,missingInformation:gap.missingInformation,useInStory:gap.useInStory});groups.add(QUESTION_BY_ID[id].group);}}}
+ if(addCriticalQuestions&&!s.scenario&&!policy.currentGroupSkipped&&policy.remaining>0){const gap=unresolved.find(g=>!g.resolvedBy&&!covered.some(x=>x.id===g.questionId)&&g.questionText&&criticalGapStatus(g,s,answerText,unknownAnswer).status!=='skipped'&&!s.shown.includes(g.questionId));if(gap){let id=gap.questionId;if(!id)id=Object.keys(KEY_QUESTION_BY_ID).find(k=>!s.shown.includes(k)&&!criticalUnknowns.some(x=>x.questionId===k));if(id&&QUESTION_BY_ID[id]&&!RETIRED_QUESTION_IDS.includes(id)){gap.questionId=id;questions.push({id,reason:gap.whyMissing,questionText:gap.questionText,informationGain:3,missingInformation:gap.missingInformation,useInStory:gap.useInStory});groups.add(QUESTION_BY_ID[id].group);}}}
  for(const q of rankQuestions(raw.questions).sort((a,b)=>Number(Boolean(QUESTION_BY_ID[a.id]?.personalDetail))-Number(Boolean(QUESTION_BY_ID[b.id]?.personalDetail)))){if(!q||!QUESTION_BY_ID[q.id])throw new AppError('invalid_response',502);if(KEY_QUESTION_BY_ID[q.id]&&(questions.some(x=>KEY_QUESTION_BY_ID[x.id])||!criticalUnknowns.some(g=>g.questionId===q.id&&g.questionText)))continue;if(QUESTION_BY_ID[q.id].personalDetail&&(detailCount>=2||questions.some(x=>QUESTION_BY_ID[x.id]?.personalDetail)))continue;if(SCENARIO_BY_ID[q.id]||['G12','G14'].includes(q.id)||blocked.has(q.id)||groups.has(QUESTION_BY_ID[q.id].group))continue;if(typeof q.reason!=='string'||!q.reason.trim()||q.reason.length>300)throw new AppError('invalid_response',502);if(questions.length>=Math.min(3,policy.remaining)||policy.currentGroupSkipped)break;if(q.excludedOptions!=null&&(!Array.isArray(q.excludedOptions)||q.excludedOptions.length>(QUESTION_BY_ID[q.id].options||[]).length||new Set(q.excludedOptions.map(x=>x?.option)).size!==q.excludedOptions.length||q.excludedOptions.some(x=>!x||!QUESTION_BY_ID[q.id].options?.includes(x.option)||!anchored(x.sourceId,x.evidence))))throw new AppError('invalid_response',502,{reason:'question_option_evidence'});if(QUESTION_BY_ID[q.id].kind!=='text'&&QUESTION_BY_ID[q.id].options?.length&&!reviewedQuestionOptions(QUESTION_BY_ID[q.id],q).options.length)continue;questions.push({id:q.id,...(q.excludedOptions?.length?{excludedOptions:q.excludedOptions}:{}),answerKind:QUESTION_BY_ID[q.id].answerKind,reason:q.reason,...(q.informationGain!=null?{informationGain:q.informationGain,missingInformation:q.missingInformation.slice(0,300),useInStory:q.useInStory.slice(0,300)}:{}),tense:questionTime(b).tense,questionText:criticalUnknowns.find(g=>g.questionId===q.id&&g.kind==='address_preference')?.questionText||resolveQuestionWording(QUESTION_BY_ID[q.id],q,b).questionText});groups.add(QUESTION_BY_ID[q.id].group);}
  questions.sort((a,b)=>Number(Boolean(QUESTION_BY_ID[a.id]?.personalDetail))-Number(Boolean(QUESTION_BY_ID[b.id]?.personalDetail)));
  let conflict=null;if(raw.conflict){const c=raw.conflict;if(typeof c.question!=='string'||!c.question.trim()||c.question.length>400||!Array.isArray(c.evidence)||c.evidence.length!==2||c.evidence.some(x=>!anchored(x?.sourceId,x?.text))||c.evidence[0].text===c.evidence[1].text)throw new AppError('invalid_response',502);conflict={question:c.question,evidence:c.evidence.map(({sourceId,text})=>({sourceId,text}))};}
@@ -44,7 +44,9 @@ export function normalizePlan(raw,b,{addCriticalQuestions=true}={}){
   const candidates=(Array.isArray(raw.scenarioCandidates)?raw.scenarioCandidates:[]).filter(c=>SCENARIO_BY_ID[c?.id]&&[c.relevance,c.information,c.ease].every(n=>Number.isInteger(n)&&n>=1&&n<=2)&&typeof c.reason==='string'&&!recentIds.has(c.id)&&!s.shown.includes(c.id)&&!usedGroups.has(SCENARIO_BY_ID[c.id].group)&&SCENARIO_BY_ID[c.id].group!==lastGroup).sort((a,b)=>b.relevance-a.relevance||b.information-a.information||b.ease-a.ease);
   const top=candidates.filter(c=>c.relevance===candidates[0]?.relevance).slice(0,3);if(top.length){const seed=parseInt(createHash('sha256').update(supplementKey(b)+JSON.stringify(recent)).digest('hex').slice(0,8),16);picked=top[seed%top.length];questions.push({id:picked.id,reason:picked.reason.slice(0,300),tense:'hypothetical'});}
  }
- if(coreGap&&!conflict)conflict={kind:'critical_background',question:coreGap.questionText||'请说明这次故事以谁为主角，以及要改变谁的哪件事。',evidence:[{sourceId:coreGap.sourceId,text:coreGap.evidence}]};
+ if(conflict&&unsupportedQuestionReason(conflict.question))conflict=null;
+ // Last display gate also applies to model rewrites of ordinary and temporary questions.
+ for(let i=questions.length-1;i>=0;i--)if(unsupportedQuestionReason(questions[i].questionText))questions.splice(i,1);
  if(s.scenario){expectations.free=[];expectations.unknown=[];}
  return {generationUnknowns:s.plan?.generationUnknowns||[],criticalUnknowns,questions:conflict||s.scenario?[]:questions,covered,conflict,expectations,stop:!conflict&&(Boolean(raw.stop)||Boolean(s.scenario)||Boolean(picked)||questions.length===0||s.shown.length+questions.length>=8),scenarioAnalysis};
 }
@@ -64,7 +66,7 @@ export async function planWithGapCheck(background,caller,{sleep=ms=>new Promise(
  let response=await request(plannerMessages(background));let plan=normalizePlan(response.result,background);const s=supplementState(background);carriedGaps=plan.criticalUnknowns;
  stages.selection={proposed:response.result.questions.length,scenarioProposed:response.result.scenarioCandidates?.length||0,kept:plan.questions.length};
  const policy=questionSelectionState(background);
- if(!plan.conflict&&!s.scenario&&policy.remaining>0&&!policy.currentGroupSkipped){
+ if(plan.conflict||(!s.scenario&&policy.remaining>0&&!policy.currentGroupSkipped)){
   const originalOrdinary=plan.questions.filter(q=>ORDINARY_BY_ID[q.id]);
   const originalScenario=plan.questions.find(q=>SCENARIO_BY_ID[q.id]);stage='review';
   const review=await run(questionReviewMessages(background,plan),r=>{trackGaps(r);return validateQuestionReview(r,background);});

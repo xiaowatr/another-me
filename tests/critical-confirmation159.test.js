@@ -16,25 +16,23 @@ function legacy(overrides={}){
  return supplement.saveSupplement(background,{...supplement.supplementState(background),criticalUnknowns:gaps,plan:{questions:[],covered:[],criticalUnknowns:gaps,requestId:'11111111-1111-4111-8111-111111111111',conflict:{kind:'critical_background',question,evidence:[{sourceId:gap.sourceId,text:gap.evidence}]}},confirmations:[answer,answer],confirmationContexts:[{sourceIndex:0,question,gapKeys:[]},{sourceIndex:1,question,gapKeys:[]}],...overrides});
 }
 
-test('missing optional questionText: one confirmation reaches compiled setting and prevents repeated actor question',()=>{
+test('v163 retires the actor question even before a confirmation, while preserving any supplied answer',()=>{
  let b=persist(background,normalizePlan(raw(gap),background));
- const confirmed=supplement.recordSupplementConfirmation(supplement.supplementState(b),answer);
- b=supplement.saveSupplement(b,confirmed);supplement.validateSupplement(b);
- const next=normalizePlan(raw(gap),b);
- assert.equal(next.conflict,null);
- assert.deepEqual(confirmed.confirmationContexts[0].gapKeys,['actor_choice']);
+ assert.equal(supplement.supplementState(b).plan.conflict,null);
+ b=supplement.saveSupplement(b,supplement.recordSupplementConfirmation(supplement.supplementState(b),answer));
+ assert.equal(normalizePlan(raw(gap),b).conflict,null);
  assert.deepEqual(compileSetting(b).clarifications,[]);
- const record=supplement.supplementaryContext(b).settingRecord.criticalBackground[0];
- assert.equal(record.status,'answered');assert.equal(record.answer.text,answer);
+ assert.deepEqual(supplement.supplementaryContext(b).settingRecord.criticalBackground,[]);
+ assert.ok(supplement.supplementSources(b).some(x=>x.id==='confirmation:0'&&x.text===answer));
 });
 
-test('saved two-round legacy confirmations can be relinked without adding an answer or clearing other fields',()=>{
+test('saved legacy confirmations remain evidence while the obsolete blocking question retires',()=>{
  const b=legacy({answers:{G04:{selected:[],text:'保留这条旧回答',skipped:false}},shown:['G04']});
  const restored=supplement.supplementState(JSON.parse(JSON.stringify(b)));
  assert.equal(restored.confirmations.length,2);
  assert.deepEqual(restored.confirmationContexts.map(x=>x.gapKeys),[['actor_choice'],['actor_choice']]);
  assert.equal(restored.answers.G04.text,'保留这条旧回答');
- assert.equal(supplement.canRecheckConfirmedConflict(restored),true);
+ assert.equal(supplement.canRecheckConfirmedConflict(restored),false);assert.equal(restored.plan.conflict,null);
  assert.equal(normalizePlan(raw(gap),supplement.saveSupplement(b,restored)).conflict,null);
  assert.equal(b.hypotheticalDirection,background.hypotheticalDirection);
 });
@@ -58,13 +56,14 @@ test('legacy recovery refuses ambiguous multiple gaps and mismatching evidence',
  }
 });
 
-test('unknown confirmation remains unresolved; model resolvedBy alone cannot stand in for a user answer',()=>{
+test('unknown legacy confirmations remain unknown but no longer block the fixed protagonist',()=>{
  const b=legacy({confirmations:['不确定','说不清']});
  const restored=supplement.supplementState(b);
  assert.equal(supplement.canRecheckConfirmedConflict(restored),false);
- assert.ok(normalizePlan(raw(gap),b).conflict);
+ assert.equal(normalizePlan(raw(gap),b).conflict,null);
+ assert.deepEqual(restored.confirmations,['不确定','说不清']);
  const unlinked=persist(background,normalizePlan(raw({...gap,resolvedBy:{sourceId:'hypotheticalDirection',evidence:gap.evidence}}),background));
- assert.notEqual(supplement.supplementaryContext(unlinked).settingRecord.criticalBackground[0].status,'answered');
+ assert.deepEqual(supplement.supplementaryContext(unlinked).settingRecord.criticalBackground,[]);
 });
 
 test('an unrelated question or previously linked different gap cannot be adopted as this confirmation',()=>{
@@ -88,11 +87,11 @@ test('explicit model conflict remains blocking even after the actor gap is answe
  assert.deepEqual(normalizePlan({...raw(gap),conflict},b).conflict,conflict);
 });
 
-test('changing a question under the same gap key does not silently reuse an unrelated answer',()=>{
- let b=persist(background,normalizePlan(raw({...gap,questionText:'这次主角是谁？'}),background));
- b=supplement.saveSupplement(b,supplement.recordSupplementConfirmation(supplement.supplementState(b),answer));
+test('changing wording under a retired actor key cannot revive a protagonist confirmation',()=>{
+ const b=legacy();
  const next=normalizePlan(raw({...gap,questionText:'这次要改变的是谁的选择？'}),b);
- assert.ok(next.conflict);
+ assert.equal(next.conflict,null);assert.deepEqual(next.questions,[]);
+ assert.deepEqual(supplement.supplementState(b).confirmations,[answer,answer]);
 });
 
 test('question-analysis fallback preserves the request ID together with the blocking state',()=>{
@@ -109,18 +108,14 @@ test('an omitted questionText on the next response does not discard the previous
  assert.equal(normalizePlan(raw(gap),b).conflict,null);
 });
 
-test('actual two-stage planner consumes the answer for both combined and split input layouts without an extra confirmation',async()=>{
+test('both input layouts use two existing stages without asking who the protagonist is',async()=>{
  for(const direction of [background.hypotheticalDirection,background.realityOutcome+'另一条路是：'+background.hypotheticalDirection+'写入职后第一个月。']){
   const b={...background,hypotheticalDirection:direction},g={...gap,evidence:direction};let calls=0;
   const caller={call:async(task,messages,options)=>{
    calls++;const result=options.questionStage==='review'?{...raw(g),keepScenario:false,changeSubject:'self',evidence:direction}:raw(g);
    options.validateResult(result);return {result,requestId:'synthetic-request-'+calls};
   }};
-  const first=await planWithGapCheck(b,caller);assert.ok(first.conflict);assert.equal(calls,1);
-  let saved=persist(b,first);saved=supplement.saveSupplement(saved,supplement.recordSupplementConfirmation(supplement.supplementState(saved),answer));
-  const next=await planWithGapCheck(saved,caller);
-  assert.equal(next.conflict,null);assert.equal(next.logicReviewed,true);assert.equal(calls,3);
-  assert.equal(supplement.supplementState(saved).confirmations.length,1);
-  assert.deepEqual(compileSetting(saved).clarifications,[]);
+  const first=await planWithGapCheck(b,caller);assert.equal(first.conflict,null);assert.equal(calls,2);assert.equal(first.logicReviewed,true);
+  assert.deepEqual(first.questions,[]);assert.deepEqual(compileSetting(persist(b,first)).clarifications,[]);
  }
 });

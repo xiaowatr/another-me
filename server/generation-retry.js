@@ -7,13 +7,24 @@ export function schemaRetryFeedback(error,messages){
  const d=error.diagnostic;
  if(error.category!=='invalid_response'||d?.stage!=='schema'||d.reason!=='structured_schema'||typeof d.field!=='string'||!/^\/(?:[A-Za-z0-9_~-]+\/)*[A-Za-z0-9_~-]+$/.test(d.field))return null;
  let schema=storyTools(messages)[0].function.parameters;
- for(const part of d.field.slice(1).split('/').map(s=>s.replace(/~1/g,'/').replace(/~0/g,'~'))){schema=schema.properties?.[part];if(!schema)return null;}
+ for(const part of d.field.slice(1).split('/').map(s=>s.replace(/~1/g,'/').replace(/~0/g,'~'))){schema=schema.type==='array'&&/^\d+$/.test(part)?schema.items:schema.properties?.[part];if(!schema)return null;}
  const {description,...requirement}=schema;
  return {instruction:RETRY_RULE,issues:[{kind:'format',field:d.field,requirement}]};
 }
 export function hardRetryFeedback(issues,c){
  const items=[];
  for(const x of issues){const p=x.proof;
+  if(x.reason==='internal_timeline_conflict'||x.reason==='internal_timeline_diagnostic')continue;
+  if(x.reason==='calendar_ordinal_conflict'&&p?.kind==='calendar_ordinal'&&p.rule?.quote&&p.quote&&p.rangeQuote){
+   const raw=[c.originalInput,c.original].filter(Boolean).some(b=>Object.values(b).some(v=>typeof v==='string'&&v.includes(p.rule.quote)))||(c.personalization?.confirmations||[]).some(t=>t.includes(p.rule.quote));
+   if(raw&&!items.some(i=>i.conflictQuote===p.quote))items.push({kind:'confirmed_conflict',field:x.field.replace(/^scenes\.([0-2])\.text$/,(_,i)=>`chapter${Number(i)+1}.text`),inputBasis:{frequencyQuote:p.rule.quote,calendarQuote:p.rangeQuote,totalQuote:p.totalQuote,calculation:p.calculation},conflictQuote:p.quote});
+   if(items.length===2)break;continue;
+  }
+  if(x.reason==='narration_cutoff_conflict'&&p?.kind==='narration_cutoff'&&p.rule?.quote&&p.quote&&p.anchorQuote){
+   const raw=[c.originalInput,c.original].filter(Boolean).some(b=>Object.values(b).some(v=>typeof v==='string'&&v.includes(p.rule.quote)))||(c.personalization?.confirmations||[]).some(t=>t.includes(p.rule.quote))||c.personalization?.extra?.includes(p.rule.quote)||c.personalization?.latestConfirmation?.answer?.includes(p.rule.quote);
+   if(raw&&!items.some(i=>i.conflictQuote===p.quote))items.push({kind:'confirmed_conflict',field:x.field.replace(/^scenes\.([0-2])\.text$/,(_,i)=>`chapter${Number(i)+1}.text`),inputBasis:{narrationQuote:p.rule.quote,calculation:p.calculation},anchorQuote:p.anchorQuote,conflictQuote:p.quote});
+   if(items.length===2)break;continue;
+  }
   if(x.reason!=='frequency_conflict'||!p?.rule?.quote||!p.quote||!p.calculation||!['explicit_frequency','explicit_month_total','explicit_complete_record','explicit_window_total','explicit_total','window_ordinal'].includes(p.kind))continue;
   const raw=[c.originalInput,c.original].filter(Boolean).some(b=>Object.values(b).some(v=>typeof v==='string'&&v.includes(p.rule.quote)))||(c.personalization?.answers||[]).some(a=>[...(a.selected||[]),a.text||''].join('；').includes(p.rule.quote))||(c.personalization?.confirmations||[]).some(t=>t.includes(p.rule.quote))||c.personalization?.extra?.includes(p.rule.quote)||c.personalization?.latestConfirmation?.answer?.includes(p.rule.quote);
   if(!raw||items.some(i=>i.conflictQuote===p.quote))continue;

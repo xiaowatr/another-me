@@ -1,3 +1,4 @@
+import {STORY_PARTICIPANTS} from '../src/question-premises.js';
 import {supplementState,supplementSources,supplementaryContext} from '../src/supplementary.js';
 import {questionSelectionState} from './question-policy.js';
 import {questionTime} from '../src/question-context.js';
@@ -8,7 +9,7 @@ export function questionInput(background,criticalUnknowns){
  const state=supplementState(background),record=supplementaryContext(background).settingRecord,selection=questionSelectionState(background);
  const {shown,answerContexts,confirmations,reusedAnswers,...limits}=selection;
  const sources=supplementSources(background),sourceFields=new Set(sources.map(x=>x.id));
- return {timeAnchor:questionTime(background),sources,hypotheticalDirection:background.hypotheticalDirection,
+ return {storyParticipants:STORY_PARTICIPANTS,timeAnchor:questionTime(background),sources,hypotheticalDirection:background.hypotheticalDirection,
   backgroundMetadata:Object.fromEntries(Object.entries(background).filter(([key])=>!sourceFields.has(key)&&!['supplementary','historyReuse'].includes(key))),
   lifeBackground:lifeBackgroundEntries(background).map(({text,...entry})=>entry),
   selectionState:{...limits,shown,reusedAnswers:reusedAnswers.map(({text,selected,sourceContext,...item})=>({...item,sourceRef:item.id}))},

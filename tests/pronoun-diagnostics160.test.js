@@ -40,13 +40,14 @@ test('preference respects the existing question limit and preserves unrelated an
 });
 const actor={key:'actor_choice',sourceId:'hypotheticalDirection',evidence:b.hypotheticalDirection,missingInformation:'主角和选择',whyMissing:'合成回归缺口',useInStory:'明确主角',blocksStory:'actor_or_choice'};
 const actorInput=()=>persist(b,normalizePlan(raw(actor),b));
-test('unresolved actor fails before model with trace reason and matching request ID, without source text in diagnostic',async()=>{
+test('genuine change-operation ambiguity still fails before model with safe trace and matching request ID',async()=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'am160-')),lines=[];let calls=0;
  const res={statusCode:422,setHeader(){}};const trace=makeStoryTrace(res,'11111111-1111-4111-8111-111111111111',{directory:dir,detached:true,emit:x=>lines.push(JSON.parse(x))});
  try{
   const app=createExperience({mode:'real',model:'mock'},{call:()=>{calls++;throw Error('must not call');}});
-  await trace.run(async()=>{const first=await app.story({background:actorInput()});assert.equal(first.requestId,trace.record.requestId);await assert.rejects(app.story({background:actorInput(),clarificationSkipped:true}),e=>e.status===422&&e.diagnostic.reason==='unresolved_setting'&&e.diagnostic.issues[0].code==='unresolved_actor_or_choice');});
-  trace.complete();const last=lines.at(-1);assert.equal(calls,0);assert.equal(last.actualCallCount,0);assert.equal(last.httpStatus,422);assert.equal(last.inputValidation.issues[0].status,'unasked');assert.ok(last.events.some(e=>e.name==='input_clarification_required'));assert.ok(!JSON.stringify(last).includes(b.hypotheticalDirection));assert.doesNotMatch(errorMessages.input_conflict,/位置/);
+  const actualAmbiguity={...b,realityOutcome:'那件事没发生。',hypotheticalDirection:'改为我参加，我也参加。'};
+  await trace.run(async()=>{const first=await app.story({background:actualAmbiguity});assert.equal(first.requestId,trace.record.requestId);await assert.rejects(app.story({background:actualAmbiguity,clarificationSkipped:true}),e=>e.status===422&&e.diagnostic.reason==='unresolved_setting'&&e.diagnostic.issues[0].code==='conflicting_change_operation');});
+  trace.complete();const last=lines.at(-1);assert.equal(calls,0);assert.equal(last.actualCallCount,0);assert.equal(last.httpStatus,422);assert.equal(last.inputValidation.issues[0].code,'conflicting_change_operation');assert.ok(last.events.some(e=>e.name==='input_clarification_required'));assert.ok(!JSON.stringify(last).includes(b.hypotheticalDirection));assert.doesNotMatch(errorMessages.input_conflict,/位置/);
  }finally{fs.unlinkSync(path.join(dir,'story-timings.jsonl'));fs.rmdirSync(dir);}
 });
 test('one linked actor confirmation reaches actual story entry and returns a story after one mocked model call',async()=>{

@@ -1,3 +1,4 @@
+import {retiredCriticalGap} from './question-premises.js';
 // Small contextual text-question slots, sharing the existing pages/answers/eight-question budget.
 export const KEY_QUESTION_BY_ID=Object.fromEntries(Array.from({length:8},(_,i)=>{const id='K'+(i+1);return [id,{id,question:'请补充这次选择所需的这处背景。',kind:'text',options:[],group:'critical:'+id,purpose:'仅澄清本次故事的关键背景；未答保持未知'}];}));
 const bounded=(s,n)=>typeof s==='string'&&s.trim()&&s.length<=n;
@@ -22,7 +23,7 @@ export function validCriticalGap(g){return g&&/^[a-z][a-z0-9_-]{0,47}$/.test(g.k
 export function mergeCriticalGaps(existing,incoming,sources){
  const map=new Map(sources.map(x=>[x.id,String(x.text)])),items=new Map();
  for(const g of [...(Array.isArray(existing)?existing:[]),...(Array.isArray(incoming)?incoming:[])]){
-  if(!validCriticalGap(g)||!map.get(g.sourceId)?.includes(g.evidence))continue;
+  if(!validCriticalGap(g)||retiredCriticalGap(g)||!map.get(g.sourceId)?.includes(g.evidence))continue;
   const old=items.get(g.key);if(!old&&items.size>=8)continue;
   const address=g.kind==='address_preference'||old?.kind==='address_preference';
   const person=g.person||old?.person;

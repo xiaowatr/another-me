@@ -84,6 +84,10 @@ tests/*
 !tests/pronoun-diagnostics160.test.js
 !tests/input-guidance161.test.js
 !tests/frequency162.test.js
+!tests/question-premises163.test.js
+!tests/narrative-time164.test.js
+!tests/internal-timeline165.test.js
+!tests/evening166.test.js
 
 # Local evaluation sources, judgments and frozen code snapshots.
 evaluations/story_constraints/

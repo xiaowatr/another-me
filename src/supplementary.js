@@ -1,3 +1,4 @@
+import {retireUnsupportedQuestions} from './question-premises.js';
 import {questionMeaning} from './question-meaning.js';
 import {validSelections,reviewedQuestionOptions} from './question-options.js';
 import {activeReusedAnswers,reuseProvenance,activeReuseEntries} from './history-reuse-data.js';
@@ -15,7 +16,7 @@ const baseFields=['realityOutcome','hypotheticalDirection','birthYear','forkAge'
 export function supplementKey(b){const extra=[...LIFE_BACKGROUND_FIELDS,'additionalInfo','historyReuse'].filter(k=>b[k]).map(k=>[k,b[k]]);const text=JSON.stringify([...baseFields.map(k=>b[k]||''),...(extra.length?[extra]:[])]);let a=2166136261,c=5381;for(const x of text){a=Math.imul(a^x.charCodeAt(0),16777619);c=Math.imul(c,33)^x.charCodeAt(0);}return (a>>>0).toString(16)+(c>>>0).toString(16);}
 const blank=()=>({shown:[],answers:{},pages:[],page:0,questionMeta:{},criticalUnknowns:[],confirmations:[],extra:'',plan:null,scenario:null,recentScenarios:[]});
 function envelope(b){try{const x=JSON.parse(b.supplementary||'{}');return x&&Array.isArray(x.contexts)?x:{contexts:[]};}catch{return {contexts:[]};}}
-export function supplementState(b){const contexts=envelope(b).contexts,exact=contexts.find(x=>x.key===supplementKey(b));if(exact)return restoreCriticalConfirmationLinks(exact.state);if(b.followupKey==='model'&&b.followupQuestion){const basis=supplementKey({...b,followupAnswer:''}),carried=contexts.find(x=>x.basis===basis||x.key===basis);if(carried)return restoreCriticalConfirmationLinks({...carried.state,...(carried.state.scenario?{scenario:{...carried.state.scenario,analysis:null}}:{})});}return {...blank(),recentScenarios:contexts[0]?.state?.recentScenarios||[]};}
+export function supplementState(b){const contexts=envelope(b).contexts,exact=contexts.find(x=>x.key===supplementKey(b));if(exact)return retireUnsupportedQuestions(restoreCriticalConfirmationLinks(exact.state));if(b.followupKey==='model'&&b.followupQuestion){const basis=supplementKey({...b,followupAnswer:''}),carried=contexts.find(x=>x.basis===basis||x.key===basis);if(carried)return retireUnsupportedQuestions(restoreCriticalConfirmationLinks({...carried.state,...(carried.state.scenario?{scenario:{...carried.state.scenario,analysis:null}}:{})}));}return {...blank(),recentScenarios:contexts[0]?.state?.recentScenarios||[]};}
 export function saveSupplement(b,state){const key=supplementKey(b),old=envelope(b);return {...b,supplementary:JSON.stringify({contexts:[{key,basis:supplementKey({...b,followupAnswer:''}),state},...old.contexts.filter(x=>x.key!==key)].slice(0,3)})};}
 export function recordSupplementConfirmation(state,text){
  const answer=text.trim(),conflict=state.plan?.conflict,gaps=state.criticalUnknowns?.length?state.criticalUnknowns:state.plan?.criticalUnknowns||[];

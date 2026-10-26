@@ -61,17 +61,12 @@ test('review can keep one grounded temporary question; ungrounded gap and orphan
  const second={...gap,key:'other_start',questionId:'K2'};const q2={...candidate,id:'K2'};
  assert.equal(normalizePlan({...initial([{...gap,questionId:'K1'},second]),questions:[candidate,q2]},background,{addCriticalQuestions:false}).questions.length,1);
 });
-test('unclear actor asks only one clarification; an explicit confirmation resolves it; changed sources invalidate stale evidence',()=>{
+test('fixed protagonist retires legacy actor gaps but leaves actual user answers available',()=>{
  const actor={...gap,key:'actor',blocksStory:'actor_or_choice',missingInformation:'谁做出本次选择',questionText:'这次继续学陶艺的是谁？'};
- const b=persistPlan(background,normalizePlan(initial([actor]),background));assert.equal(supplementState(b).plan.questions.length,0);assert.deepEqual(compileSetting(b).clarifications,[actor.questionText]);
- let s=supplementState(b);
- // A model-linked quote alone is still not a confirmation of this question.
- const unlinked=saveSupplement(b,{...s,confirmations:['是我自己。'],criticalUnknowns:[{...actor,resolvedBy:{sourceId:'confirmation:0',evidence:'是我自己。'}}]});
- assert.deepEqual(compileSetting(unlinked).clarifications,[actor.questionText]);assert.equal(request(unlinked).criticalBackground[0].status,'unconfirmed');
- s=recordSupplementConfirmation(s,'是我自己。');
- const confirmed=saveSupplement(b,s);validateSupplement(confirmed);assert.equal(compileSetting(confirmed).clarifications.length,0);
- assert.equal(request(confirmed).criticalBackground[0].status,'answered');assert.equal(request(confirmed).criticalBackground[0].answer.text,'是我自己。');
- const unrelated=saveSupplement(b,{...s,confirmationContexts:s.confirmationContexts.map(x=>({...x,question:'另一个问题'}))});assert.deepEqual(compileSetting(unrelated).clarifications,[actor.questionText]);
- s={...s,confirmations:[],confirmationContexts:[]};assert.equal(request(saveSupplement(b,s)).criticalBackground[0].status,'unasked');
- const changed={...b,hypotheticalDirection:'如果换一个爱好。'};assert.equal(request(changed).criticalBackground.length,0);
+ const b=persistPlan(background,normalizePlan(initial([actor]),background));
+ assert.equal(supplementState(b).plan.conflict,null);assert.deepEqual(compileSetting(b).clarifications,[]);
+ const saved=saveSupplement(b,{...supplementState(b),confirmations:['是我自己。'],criticalUnknowns:[actor]});
+ validateSupplement(saved);assert.deepEqual(request(saved).criticalBackground,[]);
+ assert.ok(supplementaryContext(saved).confirmations.includes('是我自己。'));
+ const changed={...saved,hypotheticalDirection:'如果换一个爱好。'};assert.deepEqual(supplementState(changed).confirmations,[]);
 });
