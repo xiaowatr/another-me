@@ -91,3 +91,12 @@ tests/*
 
 # Local evaluation sources, judgments and frozen code snapshots.
 evaluations/story_constraints/
+
+!tests/age167.test.js
+!tests/shadow-review167.test.js
+
+!tests/consistency168.test.js
+
+!tests/age169.test.js
+
+!tests/frequency171.test.js

@@ -1,3 +1,6 @@
+import {consistencyProofGrounded} from './story-consistency.js';
+import {generationInput} from './generation-input.js';
+import {ageProofIsGrounded} from './age-facts.js';
 import {updateStoryRequestInput} from './story-request.js';
 import {storyTools} from './story-tools.js';
 import {RETRY_RULE} from './generation-rules.js';
@@ -14,6 +17,8 @@ export function schemaRetryFeedback(error,messages){
 export function hardRetryFeedback(issues,c){
  const items=[];
  for(const x of issues){const p=x.proof;
+  if(x.reason==='age_fact_conflict'&&ageProofIsGrounded(p,c.originalInput||c.original||{})){items.push({kind:'confirmed_conflict',field:x.field.replace(/^scenes\.([0-2])\.text$/,(_,i)=>`chapter${Number(i)+1}.text`),inputBasis:{sourceFields:p.sourceFields,expectedAges:p.expectedAges,anchorYear:p.anchorYear,calculation:p.calculation},conflictQuote:p.quote});if(items.length===2)break;continue;}
+  if(['narration_anchor_conflict','course_completion_conflict'].includes(x.reason)&&consistencyProofGrounded(p,generationInput(c))){items.push({kind:'confirmed_conflict',field:x.field.replace(/^scenes\.([0-2])\.text$/,(_,i)=>`chapter${Number(i)+1}.text`),inputBasis:{conditionQuote:p.rule.quote,calculation:p.calculation},conflictQuote:p.quote,...(p.bodyQuote?{bodyEvidence:{field:p.bodyField,quote:p.bodyQuote}}:{})});if(items.length===2)break;continue;}
   if(x.reason==='internal_timeline_conflict'||x.reason==='internal_timeline_diagnostic')continue;
   if(x.reason==='calendar_ordinal_conflict'&&p?.kind==='calendar_ordinal'&&p.rule?.quote&&p.quote&&p.rangeQuote){
    const raw=[c.originalInput,c.original].filter(Boolean).some(b=>Object.values(b).some(v=>typeof v==='string'&&v.includes(p.rule.quote)))||(c.personalization?.confirmations||[]).some(t=>t.includes(p.rule.quote));

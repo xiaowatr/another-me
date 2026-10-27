@@ -14,7 +14,10 @@ export function storyTools(messages){const payload=storyRequestInput(messages);
 
 // Partial repair uses exactly the corresponding submit_story property schemas.
 export function fieldRepairTools(fields,messages=[]){
- if(!Array.isArray(fields)||!fields.length||new Set(fields).size!==fields.length||fields.some(f=>!['intro','character','opening'].includes(f)))throw Error('Invalid repair fields');
- const full=storyTools([])[0].function.parameters;if(storyRequestInput(messages).effectiveSetting?.version>=5)full.properties.intro=briefIntro;const ordered=Object.keys(full.properties).filter(f=>fields.includes(f));
- return [{type:'function',function:{name:'submit_story',description:'提交指定字段',parameters:{type:'object',properties:Object.fromEntries(['kind',...ordered].map(f=>[f,full.properties[f]])),required:['kind',...ordered],additionalProperties:false}}}];
+ const body=f=>/^chapter[1-3]\.text$/.test(f);
+ if(!Array.isArray(fields)||!fields.length||new Set(fields).size!==fields.length||fields.some(f=>!['intro','character','opening'].includes(f)&&!body(f))||fields.filter(body).length>1)throw Error('Invalid repair fields');
+ const full=storyTools([])[0].function.parameters;if(storyRequestInput(messages).effectiveSetting?.version>=5)full.properties.intro=briefIntro;
+ const properties={kind:full.properties.kind};
+ for(const f of fields){if(body(f)){properties[f.slice(0,8)]={type:'object',properties:{text:str},required:['text'],additionalProperties:false};}else properties[f]=full.properties[f];}
+ return [{type:'function',function:{name:'submit_story',description:'仅提交指定字段；其余内容原样保留',parameters:{type:'object',properties,required:Object.keys(properties),additionalProperties:false}}}];
 }

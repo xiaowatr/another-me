@@ -50,7 +50,7 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       fs.appendFileSync(auditPath,JSON.stringify(record)+'\n');emit(record);
       const noThinking=task==='memory'||task==='questions'||task==='chat';
       record.thinking=noThinking?'disabled':task==='story'?(config.storyThinking||'disabled'):'unchanged';
-      record.maxCompletionTokens=options.chatRewrite?800:options.repairFields?1200:task==='memory'?(config.memoryMaxTokens||2000):task==='story'?6000:3500;
+      record.maxCompletionTokens=options.chatRewrite?800:options.repairFields?(options.repairFields.some(f=>/^chapter[1-3]\.text$/.test(f))?3000:1200):task==='memory'?(config.memoryMaxTokens||2000):task==='story'?6000:3500;
       const transportTools=task==='story'?(options.repairFields?fieldRepairTools(options.repairFields,messages):storyTools(messages)):task==='questions'&&options.questionStage?questionTools(options.questionStage):null;
       if(task==='questions')record.questionStage=options.questionStage||null;
       if(options.repairFields)record.repairFields=options.repairFields;

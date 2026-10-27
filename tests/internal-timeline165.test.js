@@ -100,8 +100,8 @@ test('consistent or absent labels never bypass the existing prose frequency chec
  }
 });
 test('real caller retries a completed next-morning event on prose evidence despite legal labels',async()=>{
- const h=await callerHarness(n=>{const x=wire();if(n===1)x.chapter3.text='第六次课结束当晚，我收好画纸。第二天早上我把画全部装好了。';return x;}),c=compiled(),drafts=[];
- try{await chooseStoryPool({caller:h.caller,messages:storyMessages(b,'',false,c),background:b,effectiveSetting:c,onDraft:d=>drafts.push(d)});assert.equal(h.requests.length,2);assert.ok(drafts[0].hardIssues.some(i=>i.reason==='narration_cutoff_conflict'));assert.ok(h.requests[1].messages.some(m=>m.content.includes('narrationQuote')));}finally{h.close();}
+ const h=await callerHarness(n=>{if(n===2)return {kind:'story',chapter3:{text:text[2]}};const x=wire();x.chapter3.text='第六次课结束当晚，我收好画纸。第二天早上我把画全部装好了。';return x;}),c=compiled(),drafts=[];
+ try{await chooseStoryPool({caller:h.caller,messages:storyMessages(b,'',false,c),background:b,effectiveSetting:c,onDraft:d=>drafts.push(d)});assert.equal(h.requests.length,2);assert.ok(drafts[0].hardIssues.some(i=>i.reason==='narration_cutoff_conflict'));assert.ok(b.details.includes(JSON.parse(h.requests[1].messages[1].content).confirmedIssues[0].proof.rule.quote));}finally{h.close();}
 });
 test('intro-only repair keeps private diagnostics and body but does not require valid metadata',async()=>{
  const h=await callerHarness(n=>{if(n===2)return {kind:'story',intro:'三个月，我上了六次课。'};const x=wire();x.intro='三个月，一共八次课。';x.chapter1.internalTime='invalid';return x;}),c=compiled(),drafts=[];

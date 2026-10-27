@@ -1,3 +1,5 @@
+import {ageSlotContract} from './age-slots.js';
+import {ageFacts} from './age-facts.js';
 import {narrativeTimeFrame} from './narrative-time.js';
 import {reuseProvenance,activeReusedAnswers} from '../src/history-reuse-data.js';
 import {questionTime,questionTitle} from '../src/question-context.js';
@@ -51,7 +53,7 @@ export function generationInput(c){
   unknownBackground:{backgroundEvidence:{dimensions:['职业与就业','家庭构成','学习前史','既往关系与共同经历','个人习惯'],sourceRefs:sources.filter(s=>!['birthYear','forkAge','locationText','gender','mbti','hypotheticalDirection'].includes(s.id)).map(s=>s.id),assumptionRefs:refs('hypotheticalDirection'),answerRefs:actualAnswers.map(a=>a.id)},questionStates,critical:gaps,skipped,reviewedOutQuestions:(state.plan?.generationUnknowns||[]).filter(q=>q&&typeof q.id==='string'&&typeof q.question==='string'&&typeof q.missingInformation==='string'&&typeof q.useInStory==='string').slice(0,8).map(q=>({id:q.id,question:q.question.slice(0,300),missingInformation:q.missingInformation.slice(0,300),useInStory:q.useInStory.slice(0,300),status:scopedIds.has(q.id)?'answered':skipped.some(x=>x.id===q.id)?'skipped':'unconfirmed',...(scopedIds.has(q.id)?{answerRef:q.id}:{})})),latestConfirmation:{question:latest.question,skipped:latest.skipped,answerRefs:latest.skipped?[]:refs('followupAnswer')},choiceReasonKnown:refs('choiceReason').length>0},
   behaviorAndLanguage:{ordinaryAnswers:actualAnswers.filter(a=>scopedIds.has(a.id)).map(a=>({sourceRef:a.id,question:a.question,purpose:a.purpose,answerKind:a.answerKind||'user_answer'})),scenarioBehavior:behavior,scenarioTimeScope:sc?.timeScope||null,expressionSourceRefs:expressionRefs,mbti:g.style.mbti},
   fixedDisplay:fixedStoryIdentity(c)};
- input.constraints.activityPlan=activityPlan(input);input.constraints.narrativeTime=narrativeTimeFrame(input);input.constraints.internalTimeline={version:2,meaning:'仅供内部的每章1至3个关键事件时间锚点，不与正文段落一一对应。写信当下由用户原话/narrativeTime.narrationAnchor决定，不随回忆推进；relativeToLetter是事件相对写信时点的before/at/after/unknown。scene为当时场景，recall为过去回顾，plan为尚未发生的打算，overview为概括；过去回忆里的第二天不等于写信之后，计划不能叙述成已经发生。period仅按明确月窗口/课次表填写第几个月，从1起；activity仅引用已有编号，否则null。不补某日，不把标注当现实事实，辅助标注不规范仅作内部诊断。'};return input;
+ input.constraints.ageFacts=ageFacts(b);input.constraints.ageSlot=ageSlotContract(b);input.constraints.activityPlan=activityPlan(input);input.constraints.narrativeTime=narrativeTimeFrame(input);input.constraints.internalTimeline={version:2,meaning:'仅供内部的每章1至3个关键事件时间锚点，不与正文段落一一对应。写信当下由用户原话/narrativeTime.narrationAnchor决定，不随回忆推进；relativeToLetter是事件相对写信时点的before/at/after/unknown。scene为当时场景，recall为过去回顾，plan为尚未发生的打算，overview为概括；过去回忆里的第二天不等于写信之后，计划不能叙述成已经发生。period仅按明确月窗口/课次表填写第几个月，从1起；activity仅引用已有编号，否则null。不补某日，不把标注当现实事实，辅助标注不规范仅作内部诊断。'};return input;
 }
 export function fixedStoryIdentity(c){
  const location=c.coordinates.locationAtFork;

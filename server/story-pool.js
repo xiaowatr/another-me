@@ -1,3 +1,4 @@
+import {fillAgeSlots} from './age-slots.js';
 import {internalTimelineIssues,withoutInternalTime} from './internal-timeline.js';
 import {recordProgramCheck} from './story-delivery-diagnostics.js';
 import {fillStoryMetadata} from './story-metadata.js';
@@ -16,21 +17,24 @@ export async function chooseStoryPool({caller,messages,background,effectiveSetti
  const keep=d=>{state.drafts.push(d);onDraft(d);};
  while(state.generated<STORY_MAX_MODEL_CALLS){
   signal?.throwIfAborted();state.generated++;
-  let requestId=null,response,issues,originalIdentity;
+  let requestId=null,response,issues,originalIdentity,ageFills=[];
   const repair=state.pendingRepair||null;state.pendingRepair=null;
   const attemptMessages=repair?fieldRepairMessages(messages,repair.story,repair.plan):withRetryFeedback(messages,state.retryFeedback||null);
   try{
    response=await caller.call('story',attemptMessages,{signal,onStart:id=>requestId=id,...(repair?{repairFields:repair.plan.fields,parentRequestId:repair.sourceId}:{}),diagnosticRange:effectiveSetting.temporal?.window,diagnosticClock:effectiveSetting.temporal,validateResult:r=>{if(r.kind==='clarification'&&(repair||!storyRequestInput(messages).canClarify))throw new AppError('invalid_response',502,{stage:'business',reason:'repeated_clarification'});}});
-   if(repair){const merged=applyFieldRepair(repair.story,response.result,repair.plan,messages,background,effectiveSetting,repair.internalTimeline);response.result=merged.result;response.internalTimeline=repair.internalTimeline;response.internalTimeDiagnostics=repair.internalTimeDiagnostics;issues=merged.issues;originalIdentity=repair.originalIdentity;}
+   if(repair){const merged=applyFieldRepair(repair.story,response.result,repair.plan,messages,background,effectiveSetting,repair.internalTimeline);response.result=merged.result;ageFills=merged.ageFills||[];response.internalTimeline=repair.internalTimeline;response.internalTimeDiagnostics=repair.internalTimeDiagnostics;
+    const changed=repair.plan.fields.filter(f=>/^chapter[1-3]\.text$/.test(f)).map(f=>Number(f[7])-1);
+    if(changed.length){response.internalTimeline=response.internalTimeline?.map((t,i)=>changed.includes(i)?null:t);response.internalTimeDiagnostics=[...(response.internalTimeDiagnostics||[]),...changed.map(i=>({field:`scenes.${i}.text`,reason:'internal_timeline_diagnostic',proof:{kind:'internal_timeline',code:'annotation_stale_after_body_repair',chapter:i+1}}))];}
+    issues=merged.issues;originalIdentity=repair.originalIdentity;}
   }catch(e){if(signal?.aborted||fatal(e))throw e;state.retryFeedback=repair?null:schemaRetryFeedback(e,messages);keep({id:e.requestId||requestId||randomUUID(),sequence:state.generated-1,attemptKind:repair?'field_repair':'generation',...(repair?{repairSourceId:repair.sourceId,repairedFields:repair.plan.fields}:{}),eligible:false,failure:{category:e.category||'network',diagnostic:e.diagnostic||null},payload:null});if(['network','timeout'].includes(e.category)){if(state.generated>=STORY_MAX_MODEL_CALLS)throw e;await sleep(Math.min(3000,state.generated*1000));signal?.throwIfAborted();}continue;}
   if(response.result.kind==='clarification')return response;
-  if(!repair){originalIdentity=response.result.identity;response.result=fillStoryMetadata(fillStoryIdentity(fillStoryOpening(response.result),effectiveSetting),storyRequestInput(messages).effectiveSetting);issues=hardStoryIssues(response.result,background,effectiveSetting);}
+  if(!repair){const ageFilled=fillAgeSlots(response.result,background);response.result=ageFilled.story;ageFills=ageFilled.filled;originalIdentity=response.result.identity;response.result=fillStoryMetadata(fillStoryIdentity(fillStoryOpening(response.result),effectiveSetting),storyRequestInput(messages).effectiveSetting);issues=hardStoryIssues(response.result,background,effectiveSetting);}
   // Annotations are advisory: only existing direct prose proofs can trigger retry.
   const internalTimeDiagnostics=response.internalTimeDiagnostics||internalTimelineIssues(response.internalTimeline,response.result,storyRequestInput(messages).effectiveSetting);
   response.result=withoutInternalTime(response.result);
   recordProgramCheck({requestId:response.requestId||requestId,sequence:state.generated-1,attemptKind:repair?'field_repair':'generation',issues});
   state.retryFeedback=hardRetryFeedback(issues,effectiveSetting);
-  const draft={id:response.requestId||requestId||randomUUID(),sequence:state.generated-1,attemptKind:repair?'field_repair':'generation',...(repair?{repairSourceId:repair.sourceId,repairedFields:repair.plan.fields}:{}),eligible:issues.length===0,hardIssues:issues,...(response.internalTimeline?{internalTimeline:response.internalTimeline}:{}),...(internalTimeDiagnostics.length?{internalTimeDiagnostics}:{}),programFilledFields:{identity:{original:originalIdentity,value:response.result.identity,basis:'产品本人主角定义与已给locationText'},opening:{value:FIXED_OPENING,basis:'固定简短开场，不新增已发生事实'}},payload:{background,effectiveSetting,story:response.result}};
+  const draft={id:response.requestId||requestId||randomUUID(),sequence:state.generated-1,attemptKind:repair?'field_repair':'generation',...(repair?{repairSourceId:repair.sourceId,repairedFields:repair.plan.fields}:{}),eligible:issues.length===0,hardIssues:issues,...(response.internalTimeline?{internalTimeline:response.internalTimeline}:{}),...(internalTimeDiagnostics.length?{internalTimeDiagnostics}:{}),programFilledFields:{age:ageFills,identity:{original:originalIdentity,value:response.result.identity,basis:'产品本人主角定义与已给locationText'},opening:{value:FIXED_OPENING,basis:'固定简短开场，不新增已发生事实'}},payload:{background,effectiveSetting,story:response.result}};
   keep(draft);
   if(draft.eligible){onDraft({...draft,selected:true,delivery:{status:repair?'program_accepted_after_field_repair':'program_accepted'}});return {result:response.result,requestId:draft.id};}
   // At most one local repair for a given draft. A failed repair can use a remaining full attempt.

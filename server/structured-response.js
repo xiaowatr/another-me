@@ -8,7 +8,7 @@ export function receiveStructured(content,task,tools,messages,diagnostic={}){
  let data=decodeJson(content,diagnostic);const tool=tools.find(t=>t.function.name===(data?.kind==='clarification'?'ask_clarification':'submit_story')),repairs=[];
  const schema=tool?.function.parameters;
  const setting=storyRequestInput(messages).effectiveSetting;let internalTimeline=null,internalTimeDiagnostics=[];
- if(task==='story'&&data?.kind==='story'&&internalTimelineEnabled(setting)&&schema?.properties?.chapter1){
+ if(task==='story'&&data?.kind==='story'&&storyRequestInput(messages).generationStage==='body'&&internalTimelineEnabled(setting)&&schema?.properties?.chapter1){
   const raw=extractInternalTimeline(data);internalTimeDiagnostics=internalTimelineIssues(raw,null,setting);
   internalTimeline=raw.map(x=>x!=null&&!validateSchema(internalTimeSchema(setting),x).length?x:null);
   data={...data};for(const k of ['chapter1','chapter2','chapter3'])if(data[k]&&typeof data[k]==='object'&&!Array.isArray(data[k])){const {internalTime,...chapter}=data[k];data[k]=chapter;}

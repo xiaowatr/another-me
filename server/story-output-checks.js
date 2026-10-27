@@ -22,7 +22,7 @@ export function storyOutputIssues(story,background){
    ||/(?:根据|遵循|按照)(?:系统|开发者)(?:提示词|提示|指令|要求)[^。！？\n]{0,35}(?:生成|描写|输出|省略|避免)/.test(text)
    ||/(?:effectiveSetting|roleGender|rewriteFeedback|behaviorReferences|internalTime|internalTimeline|relativeToLetter)\s*(?:为|是|为空|=|：|:)/.test(text)
    ||/(?:主角|角色|用户)(?:的)?性别(?:未提供|未填写|未知|不详|不透露)[^。！？\n]{0,20}(?:所以|因此|故|不应|避免)/.test(text);
-  const timeAnnotationLeak=/(?:internalTime|internalTimeline|relativeToLetter)["']?\s*(?:为|是|=|：|:)/.test(text);
+  const timeAnnotationLeak=/(?:internalTime|internalTimeline|relativeToLetter|ageFacts|explicitAgeAtEvent|allowedAgeAtEvent)["']?\s*(?:为|是|=|：|:)/.test(text);
   if(timeAnnotationLeak){issues.push({field,reason:'internal_instruction_in_story'});continue;}
   if(internal){issues.push({field,reason:'internal_instruction_in_story'});continue;}
   if(gender)continue;

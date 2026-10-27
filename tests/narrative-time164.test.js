@@ -65,7 +65,7 @@ test('direct time proof reaches existing checks and bounded retry feedback',()=>
 });
 test('a rejected next-day draft retries within the original pool and can deliver a corrected same-evening draft',async()=>{
  const c=compileSetting(b);c.originalInput=b;let calls=0;const drafts=[];
- const result=await chooseStoryPool({caller:{call:async(t,m)=>{calls++;if(calls===2)assert.ok(JSON.parse(m[1].content).retryFeedback.issues.some(x=>x.inputBasis.narrationQuote));return {result:s(calls===1?'第二天早上我把所有画装好了。':'今晚我把画收好，明天打算再看一遍。'),requestId:'synthetic-time-'+calls};}},messages:storyMessages(b,'',false,c),background:b,effectiveSetting:c,onDraft:d=>drafts.push(d)});
+ const result=await chooseStoryPool({caller:{call:async(t,m,o)=>{calls++;if(calls===2){assert.deepEqual(o.repairFields,['chapter3.text']);assert.ok(b.details.includes(JSON.parse(m[1].content).confirmedIssues[0].proof.rule.quote));return {result:{kind:'story',chapter3:{text:'今晚我把画收好，明天打算再看一遍。'}},requestId:'synthetic-time-'+calls};}return {result:s('第二天早上我把所有画装好了。'),requestId:'synthetic-time-'+calls};}},messages:storyMessages(b,'',false,c),background:b,effectiveSetting:c,onDraft:d=>drafts.push(d)});
  assert.equal(calls,2);assert.equal(result.requestId,'synthetic-time-2');assert.equal(drafts[0].eligible,false);assert.equal(drafts.at(-1).selected,true);
 });
 test('four repeated time failures stop without an eligible story or an extra call',async()=>{
