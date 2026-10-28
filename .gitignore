@@ -100,3 +100,11 @@ evaluations/story_constraints/
 !tests/age169.test.js
 
 !tests/frequency171.test.js
+
+!tests/self-change172.test.js
+
+!tests/question-failure173.test.js
+
+!tests/question-routing175.test.js
+
+!tests/explicit-clarification176.test.js

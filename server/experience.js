@@ -1,3 +1,4 @@
+import {explicitClarificationPlan} from '../src/explicit-clarification.js';
 import {publicInputIssues} from './story-delivery-diagnostics.js';
 import {guardExperience,assertSafe} from './content-safety.js';
 import {validateUserProfile} from './user-profile.js';
@@ -29,7 +30,7 @@ import { AppError, validateBackground, parseResult } from './core.js';
 import { storyMessages, chatMessages, streamingChatMessages, PROMPT_VERSION } from './prompts.js';
 import { demoStory, demoProvider } from '../src/services/demo.js';
 export function createExperience(config, caller, recordLocal = () => {}) {
-  const questionTasks=createPlannerTasks(b=>exclusive('questions',async()=>{if(config.mode==='demo')return normalizePlan({questions:[],covered:[],expectations:{}},b);return planWithGapCheck(b,caller);},'questions:'+createHash('sha256').update(JSON.stringify(b)).digest('hex')));
+  const questionTasks=createPlannerTasks(b=>exclusive('questions',async()=>{const requested=explicitClarificationPlan(b);if(requested)return requested;if(config.mode==='demo')return normalizePlan({questions:[],covered:[],expectations:{}},b);return planWithGapCheck(b,caller);},'questions:'+createHash('sha256').update(JSON.stringify(b)).digest('hex')));
   const sessions = new Map();
   const slots=createSlots(config.maxConcurrent||5);
   async function exclusive(task, fn, scope=task) {

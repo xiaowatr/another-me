@@ -1,9 +1,10 @@
+import {routeCriticalChoiceQuestions} from './question-routing.js';
 import {questionInput} from './question-input.js';
 import {QUESTION_COMMON_RULES,QUESTION_REVIEW_TASK} from './question-prompts.js';
 import {assertQuestionIds,questionIdError} from './question-contract.js';
 import {lifeBackgroundEntries} from '../src/life-background.js';
 import {QUESTION_SELECTION_RULE,QUESTION_STOP_RULE,questionSelectionState,validateQuestionAssessments} from './question-policy.js';
-import {KEY_QUESTION_BY_ID} from '../src/critical-background.js';
+import {KEY_QUESTION_BY_ID,mergeCriticalGaps} from '../src/critical-background.js';
 import {RETIRED_QUESTION_IDS,QUESTION_BY_ID as BANK_BY_ID} from '../src/question-bank.js';
 import {SCENARIO_BY_ID} from '../src/scenario-bank.js';
 import {questionTime,questionTitle} from '../src/question-context.js';
@@ -13,11 +14,13 @@ import {AppError} from './core.js';
 import {modelQuestionBank,resolveQuestionWording} from './question-wording.js';
 const QUESTION_BY_ID={...BANK_BY_ID,...KEY_QUESTION_BY_ID};
 export function questionReviewMessages(background,plan){return [{role:'system',content:QUESTION_COMMON_RULES+'\n'+QUESTION_REVIEW_TASK},{role:'user',content:JSON.stringify({...questionInput(background,plan.criticalUnknowns),previousDecision:{stop:plan.stop,unknown:plan.expectations?.unknown||[],proposedConfirmation:plan.conflict||null},candidates:plan.questions.map(q=>({...q,...(QUESTION_BY_ID[q.id]?{questionText:questionTitle(QUESTION_BY_ID[q.id],q,background),options:QUESTION_BY_ID[q.id].options}:{questionText:SCENARIO_BY_ID[q.id]?.question})})),bank:modelQuestionBank()})}];}
-export function validateQuestionReview(raw,background){
+export function validateQuestionReview(raw,background,priorGaps=[]){
  assertQuestionIds(raw,'review');validateQuestionAssessments(raw);const fail=reason=>{throw new AppError('invalid_response',502,{reason:'question_review_'+reason});};
  if(raw.stop!=null&&typeof raw.stop!=='boolean')fail('stop_flag');if(raw.questions.length>6)fail('question_count');if(!Array.isArray(raw.covered))fail('covered_type');
  if(typeof raw.keepScenario!=='boolean')fail('scenario_flag');if(!['self','other','mixed','unknown'].includes(raw.changeSubject))fail('subject');
  if(typeof raw.evidence!=='string'||!raw.evidence.trim())fail('evidence_missing');const evidence=sourceQuote(background.hypotheticalDirection||'',raw.evidence);if(evidence===null)fail('evidence_not_in_source');raw={...raw,evidence};
+ const state=supplementState(background);const gaps=mergeCriticalGaps(mergeCriticalGaps(state.criticalUnknowns?.length?state.criticalUnknowns:state.plan?.criticalUnknowns,priorGaps,supplementSources(background)),raw.criticalUnknowns,supplementSources(background));
+ const routed=routeCriticalChoiceQuestions(raw,gaps,background,{reviewed:true});raw={...raw,...routed};
  const questions=raw.questions.filter(q=>!RETIRED_QUESTION_IDS.includes(q?.id)).map(q=>{
   if(!QUESTION_BY_ID[q?.id])throw questionIdError(q?.id,'questions.id','review');if(typeof q.reason!=='string')fail('reason_type');
   // Wording is optional presentation. A bad rewrite must not invalidate an otherwise reviewed question.
