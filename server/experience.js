@@ -1,3 +1,5 @@
+import {createChatDelivery} from './chat-delivery.js';
+import {completedOptionalQuestionPlan} from '../src/question-round-policy.js';
 import {explicitClarificationPlan} from '../src/explicit-clarification.js';
 import {publicInputIssues} from './story-delivery-diagnostics.js';
 import {guardExperience,assertSafe} from './content-safety.js';
@@ -30,7 +32,7 @@ import { AppError, validateBackground, parseResult } from './core.js';
 import { storyMessages, chatMessages, streamingChatMessages, PROMPT_VERSION } from './prompts.js';
 import { demoStory, demoProvider } from '../src/services/demo.js';
 export function createExperience(config, caller, recordLocal = () => {}) {
-  const questionTasks=createPlannerTasks(b=>exclusive('questions',async()=>{const requested=explicitClarificationPlan(b);if(requested)return requested;if(config.mode==='demo')return normalizePlan({questions:[],covered:[],expectations:{}},b);return planWithGapCheck(b,caller);},'questions:'+createHash('sha256').update(JSON.stringify(b)).digest('hex')));
+  const questionTasks=createPlannerTasks(b=>exclusive('questions',async()=>{const requested=explicitClarificationPlan(b);if(requested)return requested;const completed=completedOptionalQuestionPlan(b);if(completed)return completed;if(config.mode==='demo')return normalizePlan({questions:[],covered:[],expectations:{}},b);return planWithGapCheck(b,caller);},'questions:'+createHash('sha256').update(JSON.stringify(b)).digest('hex')));
   const sessions = new Map();
   const slots=createSlots(config.maxConcurrent||5);
   async function exclusive(task, fn, scope=task) {
@@ -86,14 +88,18 @@ export function createExperience(config, caller, recordLocal = () => {}) {
       const p={id:randomUUID(),text:'',seen:'',message,history:[...s.history],controller};s.pending=p;
       // Unconfirmed chat corrections remain in recent conversation; only UI-confirmed memories are pinned.
       emit({type:'start',turnId:p.id,corrections:s.corrections});
-      let buffered='';
-      const forward=text=>{assertSafe(text);text=qualifyCurrentAge(rolePresentation(readableText(text),s.background),s.background,s.story);const risks=inspectFactText(text,s.background,{memories:s.memories,anchorYear:storyClock(s.background,s.story).year});if(risks.length)throw new AppError('background_conflict',422,{stage:'business',reason:risks[0]});checkChatGrounding(text,s.background,s.memories || [],JSON.stringify({story:s.story,roleRecords:s.roleRecords,fiction:s.memories.filter(m=>m.type==='fiction')}),recallTarget(message));p.text+=text;emit({type:'text',text});};
-      const onText=text=>{buffered+=text;};
+      const combinedSignal=AbortSignal.any([signal,controller.signal]);let requestId=null;
+      const forward=text=>{combinedSignal.throwIfAborted();assertSafe(text);text=qualifyCurrentAge(rolePresentation(readableText(text),s.background),s.background,s.story);const next=p.text+text;assertSafe(next);const risks=inspectFactText(next,s.background,{memories:s.memories,anchorYear:storyClock(s.background,s.story).year});if(risks.length)throw new AppError('background_conflict',422,{stage:'business',reason:risks[0]});checkChatGrounding(next,s.background,s.memories||[],JSON.stringify({story:s.story,roleRecords:s.roleRecords,fiction:s.memories.filter(m=>m.type==='fiction')}),recallTarget(message));p.text=next;emit({type:'text',text});};
+      const delivery=createChatDelivery({caller,currentMessage:message,history:s.history,signal:combinedSignal,onText:forward,parentRequestId:()=>requestId,onRepair:()=>emit({type:'status',phase:'repair'}),onFailure:()=>controller.abort()});
       const clockReply=intent==='chat'?directBeijingReply(message):null;
-      const response=clockReply?{result:{reply:clockReply}}:config.mode==='demo'?{result:{reply:await demoProvider.reply({turn:s.history.length/2})}}:await callChatWithRetry(caller,streamingChatMessages(s,message,intent,new Date(),input.messageId||p.id),{onText,chatEnvelope:true,chatOperationId:p.id,validateResult:()=>{},onStart:requestId=>emit({type:'request',requestId}),signal:AbortSignal.any([signal,controller.signal])});
-      if(!clockReply&&config.mode!=='demo')response.result.reply=(await rewriteDirectEchoes(caller,{reply:response.result.reply,currentMessage:message,history:s.history,signal:AbortSignal.any([signal,controller.signal]),parentRequestId:response.requestId})).reply;
-      buffered='';onText(response.result.reply);
-      if(buffered){forward(buffered);buffered='';}
+      let response,upstreamError=null;
+      try{
+       if(clockReply||config.mode==='demo'){const reply=clockReply||await demoProvider.reply({turn:s.history.length/2});response={result:{reply}};delivery.push(reply);}
+       else response=await callChatWithRetry(caller,streamingChatMessages(s,message,intent,new Date(),input.messageId||p.id),{onText:text=>delivery.push(text),incrementalChat:true,chatEnvelope:false,chatOperationId:p.id,validateResult:()=>{},onRetry:status=>emit({type:'retry',...status}),onStart:id=>{requestId=id;emit({type:'request',requestId:id});},signal:combinedSignal});
+      }catch(error){upstreamError=error;}
+      await delivery.finish({complete:!upstreamError});
+      if(upstreamError)throw upstreamError;
+      response.result.reply=p.text;
       emit({type:'memory',...normalizeChatMemory(response.result,s,message,input.messageId||p.id,p.id)});
       emit({type:'done',requestId:response.requestId});
       return {requestId:response.requestId};

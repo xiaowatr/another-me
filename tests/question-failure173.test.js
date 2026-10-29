@@ -140,3 +140,11 @@ test('literal answer is stored with original question and only explicit start ha
 test('literal question remains explicitly skippable, not automatically answered',async()=>{
  const ui=await mount(async()=>{throw Error('must not call');},literalBase);assert.equal(ui.submitted.length,0);await ui.click('跳过剩余问题，开始写故事');assert.equal(ui.submitted.length,1);const state=supplementState(ui.submitted[0]);assert.equal(state.answers.K1.skipped,true);assert.equal(state.answers.K1.text,'');assert.equal(ui.calls,0);
 });
+
+test('v177 answered optional group reaches explicit start without a second planner call, including old stop=false plans',async()=>{
+ const b={realityOutcome:'没有学陶艺。',hypotheticalDirection:'去学陶艺。'},s=supplementState(b);
+ const saved=saveSupplement(b,{...s,shown:['K1'],pages:[['K1']],page:0,answers:{K1:{selected:[],text:'慢慢尝试',skipped:false}},plan:{questions:[{id:'K1',questionText:'你想怎样尝试？'}],stop:false}});
+ const ui=await mount(async()=>{throw Error('must not replan')},saved);
+ await ui.click('提交本组回答，继续');assert.equal(ui.calls,0);assert.equal(ui.submitted.length,0);assert.match(ui.text(),/开始写故事/);
+ await ui.click('开始写故事');assert.equal(ui.submitted.length,1);assert.equal(supplementState(ui.submitted[0]).answers.K1.text,'慢慢尝试');
+});

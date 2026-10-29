@@ -1,6 +1,6 @@
 # Render Web Service 部署准备
 
-状态：生产适配和本地验证完成，不代表已经上线。
+状态：本文保留生产配置说明；当前发布状态以docs/CHANGELOG检查点和RELEASE_NOTES为准。2026-10-28已只读核实用户部署的v176运行，实际浏览器和故事验收仍待做。
 
 ## 控制台填写
 - Repository: https://github.com/xiaowatr/another-me

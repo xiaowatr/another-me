@@ -31,7 +31,7 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
   async function call(task, messages, options = {}) {
     if(!['story','chat','memory','questions'].includes(task))throw new AppError('configuration',500);
     let failureOutput=null;
-    const consumer=options;let safeBuffer='';options={...consumer,onText:consumer.onText?(text=>{safeBuffer+=text;}):undefined,validateResult:result=>{assertSafe(result);if(consumer.onText&&safeBuffer){consumer.onText(safeBuffer);safeBuffer='';}consumer.validateResult?.(result);}};
+    const consumer=options,incremental=task==='chat'&&consumer.incrementalChat===true;let safeBuffer='';options={...consumer,onText:consumer.onText?(text=>{safeBuffer+=text;if(incremental)consumer.onText(text);}):undefined,validateResult:result=>{assertSafe(result);if(!incremental&&consumer.onText&&safeBuffer){consumer.onText(safeBuffer);safeBuffer='';}consumer.validateResult?.(result);}};
     messages=messages.map((m,i)=>i===0&&m.role==='system'?{...m,content:m.content+'\n'+SAFETY_RULE}:m);if(messages[0]?.role!=='system')messages=[{role:'system',content:SAFETY_RULE},...messages];
     const model=task==='memory'?(config.memoryModel||'MiniMax-M3'):config.model;const trace=activeStoryTrace();const started = Date.now();
     const record = { operationId:trace?.record.operationId||options.chatOperationId||null,parentTaskId:trace?.record.parentTaskId||null,attempt:trace?.record.attempt||(task==='chat'?options.chatAttempt:null)||null,codeVersion:CODE_VERSION,actualModel:null,failureStage:null,failureReason:null,requestedRange:options.diagnosticRange?{months:options.diagnosticRange.months,anchor:options.diagnosticRange.anchor,precision:options.diagnosticRange.precision,start:options.diagnosticRange.start,end:options.diagnosticRange.end}:null, requestId: randomUUID(), time: new Date().toISOString(), task, model, promptVersion: task==='memory'?MEMORY_PROMPT_VERSION:task==='questions'?PLANNER_VERSION:PROMPT_VERSION, durationMs: 0, success: false, errorCategory: null, inputTokens: null, outputTokens: null, totalTokens: null, sent: false, site:config.site, usageSource:null, cachedTokens:null, auditGroup:options.auditGroup || null, status:'pending',parentRequestId:options.parentRequestId||null };
@@ -51,7 +51,7 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       const noThinking=task==='memory'||task==='questions'||task==='chat';
       record.thinking=noThinking?'disabled':task==='story'?(config.storyThinking||'disabled'):'unchanged';
       record.maxCompletionTokens=options.chatRewrite?800:options.repairFields?(options.repairFields.some(f=>/^chapter[1-3]\.text$/.test(f))?3000:1200):task==='memory'?(config.memoryMaxTokens||2000):task==='story'?6000:3500;
-      const transportTools=task==='story'?(options.repairFields?fieldRepairTools(options.repairFields,messages):storyTools(messages)):task==='questions'&&options.questionStage?questionTools(options.questionStage):null;
+      const transportTools=task==='story'?(options.repairFields?fieldRepairTools(options.repairFields,messages):storyTools(messages)):task==='questions'&&options.questionStage?questionTools(options.questionStage,{hasScenarioCandidate:options.questionHasScenario!==false}):null;
       if(task==='questions')record.questionStage=options.questionStage||null;
       if(options.repairFields)record.repairFields=options.repairFields;
       stage('transport');
@@ -74,19 +74,21 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
           captureUsage(record,item.usage);if(typeof item.model==='string'&&/^[a-zA-Z0-9_.-]{1,80}$/.test(item.model))record.actualModel=item.model;
           if(item.error || Number(item.base_resp?.status_code || 0)) throw new AppError(classify(response.status,item),502);
           const choice=item.choices?.[0]; if(choice?.finish_reason)finish=choice.finish_reason;
+          if(incremental&&choice?.delta?.tool_calls)throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_tool_unexpected'});
           if(choice?.delta?.tool_calls&&toolStream){try{toolStream.push(choice.delta.tool_calls);}catch(e){record.chatToolShape=toolStream.shape();throw new AppError('invalid_response',502,{stage:'parse',reason:e.message.startsWith('chat_tool_')?e.message:'chat_envelope'});}}
           if(typeof choice?.delta?.content==='string'&&choice.delta.content){
             // Content and tool arguments are independent provider channels. Never concatenate them.
             // Buffer legacy content until EOF; a later tool call is authoritative.
             if(options.chatEnvelope){contentWire+=choice.delta.content;if(contentWire.length>18000)throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_content_size'});continue;}
             const text=filter(choice.delta.content);
+            if(incremental&&text&&(reply+text).trim()&&!plainChatContent(reply+text))throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_envelope'});
             if(text){if(record.firstBodyMs==null)record.firstBodyMs=Date.now()-started;reply+=text;if(reply.length>6000)throw new AppError('invalid_response',502);options.onText(text);}
           }
         }
         record.streamShape={doneMarker:done,finish:['stop','length','content_filter','tool_calls'].includes(finish)?finish:'unknown',bodyLength:reply.length};
         if(envelope&&['stop','tool_calls'].includes(finish)){record.chatToolShape=toolStream.shape();if(record.chatToolShape.seen){try{toolStream.finish();}catch(e){throw new AppError('invalid_response',502,{stage:'parse',reason:e.message});}if(finish!=='tool_calls')throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_tool_finish'});record.chatTransport='tool_arguments';record.chatContentShape={length:contentWire.length,ignored:true};}else {if(finish==='tool_calls')throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_tool_missing'});record.chatContentShape={length:contentWire.length,ignored:false};const plain=plainChatContent(contentWire);if(plain){if(options.requireStructuredChat)throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_tool_missing'});const safe=textFilterForEnvelope(plain);if(!safe.trim())throw new AppError('invalid_response',502);reply=safe;if(record.firstBodyMs==null)record.firstBodyMs=Date.now()-started;options.onText(safe);const result={reply,updateType:'none',memoryOperations:[],...(options.plainChatReply?{chatProtocol:'plain_text'}:{chatProtocolError:'missing_structured_reply'})};record.chatTransport='plain_text';record.chatDegraded=!options.plainChatReply;record.chatMemoryStatus='not_requested';record.chatProtocolStatus=options.plainChatReply?'plain_text':'degraded';record.streamShape.bodyLength=reply.length;options.validateResult?.(result);record.success=true;return {result,requestId:record.requestId};}record.chatTransport='content_json';try{envelope.push(contentWire);}catch(e){record.chatEnvelopeShape=envelope.shape();record.chatEnvelopeError=/^chat_envelope_[a-z_]+$/.test(e.message)?e.message:'invalid_json';throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_envelope'});}}record.chatEnvelopeShape=envelope.shape();let result;try{result=envelope.finish();}catch(e){const reason=String(e.message||'');record.chatEnvelopeError=/^chat_envelope_[a-z_]+$/.test(reason)?reason:reason.startsWith('duplicate_field:')?'duplicate_field':'invalid_json';throw new AppError('invalid_response',502,{stage:'parse',reason:'chat_envelope'});}if(!reply.trim())throw new AppError('invalid_response',502);result.reply=reply;record.streamShape.bodyLength=reply.length;options.validateResult?.(result);record.success=true;return {result,requestId:record.requestId};}
         if(finish!=='stop' || !reply.trim())throw new AppError('invalid_response',502);
-        const result={reply,updateType:'none'};options.validateResult?.(result);record.success=true;return {result,requestId:record.requestId};
+        const result={reply,updateType:'none',...(incremental?{memoryOperations:[],chatProtocol:'plain_text'}:{})};if(incremental){record.chatTransport='plain_text';record.chatDelivery='incremental_checked_sentences';record.chatMemoryStatus='not_requested';record.chatProtocolStatus='plain_text';}options.validateResult?.(result);record.success=true;return {result,requestId:record.requestId};
       }
       if(options.onText && response.ok)throw new AppError('invalid_response',502);
       stage('response_body');
@@ -138,6 +140,8 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       const transport=!(error instanceof AppError)?transportError(error):null;
       if(transport&&!options.signal?.aborted)record.transportError={kind:transport.kind,codes:transport.codes,retryable:transport.retryable};
       const safeError = options.signal?.aborted ? new AppError('stopped') : error instanceof AppError ? error : new AppError(transport.timedOut?'timeout':'network',502,{stage:record.stage,reason:'transport_'+transport.kind,retryable:transport.retryable});
+      // Only a known connection timeout before HTTP headers can restart an unseen chat.
+      if(task==='chat'&&transport?.retryable&&transport.codes.includes('UND_ERR_CONNECT_TIMEOUT')&&record.stage==='transport'&&record.httpStatus==null&&!safeBuffer&&!options.signal?.aborted){safeError.diagnostic.retryableBeforeResponse=true;record.retryableBeforeResponse=true;}
       if(safeBuffer)safeError.replyReceived=true;
       record.failureStage=safeError.diagnostic?.stage || record.stage || 'local';
       record.failureReason=safeError.diagnostic?.reason || safeError.category;

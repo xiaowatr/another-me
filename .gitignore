@@ -108,3 +108,13 @@ evaluations/story_constraints/
 !tests/question-routing175.test.js
 
 !tests/explicit-clarification176.test.js
+
+!tests/question-latency177.test.js
+!tests/chat-connect177.test.js
+
+!tests/question-coverage178.test.js
+
+!tests/chat-stream179.test.js
+!tests/chat-display179.test.js
+!tests/value-guidance179.test.js
+!tests/retry-status179.test.js

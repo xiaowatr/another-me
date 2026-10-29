@@ -25,7 +25,7 @@ export const experience = {
   ackStory:id=>storyClient.ack(id),
   restore: (snapshot,previousSessionId,signal,lifeId) => request('/api/session/restore',{snapshot,previousSessionId,lifeId},signal),
   status: () => request('/api/status'),
-  getStory: (input,signal,trace,onRetry,onSetting,onRecover) => storyClient.get(input,signal,trace,onSetting,onRecover),
+  getStory: (input,signal,trace,onRetry,onSetting,onRecover) => storyClient.get(input,signal,trace,onSetting,onRecover,onRetry),
   reply: (input) => request('/api/chat', input),
 };
 

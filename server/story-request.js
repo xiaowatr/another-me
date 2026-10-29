@@ -1,3 +1,4 @@
+import {VALUE_GUIDANCE} from './value-guidance.js';
 import {GENERATION_SECTIONS,sectionText} from './generation-rules.js';
 
 // Rules retain system priority. Data and examples precede the sole final core block.
@@ -6,7 +7,7 @@ export function orderedStoryMessages(input,{task,output,content}={}){
  return [
   {role:'system',content:(task||sectionText(GENERATION_SECTIONS[0]))+'\n\n'+sectionText(GENERATION_SECTIONS[1])},
   {role:'user',content:JSON.stringify(data)},
-  {role:'system',content:content||sectionText(GENERATION_SECTIONS[2])},
+  {role:'system',content:(content||sectionText(GENERATION_SECTIONS[2]))+'\n\n'+VALUE_GUIDANCE},
   {role:'user',content:JSON.stringify({writingReference})},
   {role:'system',content:output||sectionText(GENERATION_SECTIONS[3])},
   {role:'system',content:sectionText(GENERATION_SECTIONS[4])}

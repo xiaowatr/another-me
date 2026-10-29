@@ -1,3 +1,4 @@
+import {criticalReviewCoverage} from './critical-review-candidates.js';
 import {routeCriticalChoiceQuestions} from './question-routing.js';
 import {questionInput} from './question-input.js';
 import {QUESTION_COMMON_RULES,QUESTION_REVIEW_TASK} from './question-prompts.js';
@@ -13,7 +14,7 @@ import {supplementSources,supplementState,supplementaryContext} from '../src/sup
 import {AppError} from './core.js';
 import {modelQuestionBank,resolveQuestionWording} from './question-wording.js';
 const QUESTION_BY_ID={...BANK_BY_ID,...KEY_QUESTION_BY_ID};
-export function questionReviewMessages(background,plan){return [{role:'system',content:QUESTION_COMMON_RULES+'\n'+QUESTION_REVIEW_TASK},{role:'user',content:JSON.stringify({...questionInput(background,plan.criticalUnknowns),previousDecision:{stop:plan.stop,unknown:plan.expectations?.unknown||[],proposedConfirmation:plan.conflict||null},candidates:plan.questions.map(q=>({...q,...(QUESTION_BY_ID[q.id]?{questionText:questionTitle(QUESTION_BY_ID[q.id],q,background),options:QUESTION_BY_ID[q.id].options}:{questionText:SCENARIO_BY_ID[q.id]?.question})})),bank:modelQuestionBank()})}];}
+export function questionReviewMessages(background,plan){return [{role:'system',content:QUESTION_COMMON_RULES+'\n'+QUESTION_REVIEW_TASK},{role:'user',content:JSON.stringify({...questionInput(background,plan.criticalUnknowns),criticalGapCoverage:criticalReviewCoverage(plan,background),previousDecision:{stop:plan.stop,unknown:plan.expectations?.unknown||[],proposedConfirmation:plan.conflict||null},reviewHasScenario:plan.questions.some(q=>SCENARIO_BY_ID[q.id]),candidates:plan.questions.map(q=>({...q,...(QUESTION_BY_ID[q.id]?{questionText:questionTitle(QUESTION_BY_ID[q.id],q,background),options:QUESTION_BY_ID[q.id].options}:{questionText:SCENARIO_BY_ID[q.id]?.question})})),bank:modelQuestionBank()})}];}
 export function validateQuestionReview(raw,background,priorGaps=[]){
  assertQuestionIds(raw,'review');validateQuestionAssessments(raw);const fail=reason=>{throw new AppError('invalid_response',502,{reason:'question_review_'+reason});};
  if(raw.stop!=null&&typeof raw.stop!=='boolean')fail('stop_flag');if(raw.questions.length>6)fail('question_count');if(!Array.isArray(raw.covered))fail('covered_type');
@@ -31,8 +32,10 @@ export function validateQuestionReview(raw,background,priorGaps=[]){
    const sources=new Map(supplementSources(background).map(s=>[s.id,[...(s.selected||[]),s.text||''].filter(Boolean).join('；')]));
    if(new Set(excluded.map(x=>x?.option)).size!==excluded.length||excluded.some(x=>!x||!QUESTION_BY_ID[q.id].options?.includes(x.option)||typeof x.evidence!=='string'||!x.evidence.trim()||x.evidence.length>500||!sources.get(x.sourceId)?.includes(x.evidence)))fail('option_evidence');
   }
-  return {...rest,...resolveQuestionWording(QUESTION_BY_ID[q.id],q,background)};
- });return {...raw,questions};
+  const wording=resolveQuestionWording(QUESTION_BY_ID[q.id],q,background);
+  if(priorGaps.some(g=>g.questionId===q.id&&g.reviewCandidateOrigin==='missing_gap_wording')&&wording.wordingSource==='bank')return null;
+  return {...rest,...wording};
+ }).filter(Boolean);return {...raw,questions};
 }
 
 // Only whitespace and one enclosing quote pair may differ; never fuzzy-match meaning.

@@ -1,3 +1,4 @@
+import {chatRetryText} from './retry-status.js';
 import {issueGuidance,hardConflictGuidance,focusInputField} from './input-guidance.js';
 import {storageFailureText} from './storage-recovery.js';
 import GlobalMemoryDialog from './GlobalMemoryDialog.jsx';
@@ -52,7 +53,7 @@ import {coordinates,coordinateError} from './context';
 import {readLives,writeLives,modelHistory,removeLifeBackup} from './life-store';
 import {composerAction,resizeComposer} from './composer';
 import MemoryPanel from './MemoryPanel';
-import { takeMessage, messageDelay, appendBubble } from './chat-stream';
+import { takeMessage,takeStreamCharacters,chatDisplayUpdate,applyChatDisplay } from './chat-stream';
 import { readDraft, writeDraft, clearDraft, EMPTY_BACKGROUND } from './draft';
 const empty = {...EMPTY_BACKGROUND,inputVersion:'6'};
 function draftStorage() {try{return appStorage();}catch{return null;}}
@@ -162,21 +163,20 @@ function App() {
   const requestLock = useRef(false);
   const activeTurn=useRef(null);
   const [chatWaiting,setChatWaiting]=useState(false);
+  const [chatProgress,setChatProgress]=useState('');
   const [timing,setTiming]=useState(null);
   const [syncFailed,setSyncFailed]=useState(false);
   function showReceived(){const t=activeTurn.current;if(!t)return;clearTimeout(t.timer);t.timer=null;flushTurn(t,true);}
   function flushTurn(t,all=false){
     if(t.stopped)return;
     let piece;
-    do{[piece,t.buffer]=takeMessage(t.buffer,all || t.done);if(!piece)break;
+    do{[piece,t.buffer]=all?takeMessage(t.buffer,true):takeStreamCharacters(t.buffer);if(!piece)break;
       t.shown+=piece;
-      const previousIds=[...t.bubbleIds];
-      if(previousIds.length>=4 || (!piece.trim() && previousIds.length)){const id=previousIds.at(-1),suffix=piece;setMessages(prev=>prev.map(m=>m.id===id?{...m,text:m.text+suffix}:m));}
-      else if(piece.trim()){const nextMessages=appendBubble([],piece,t.messageId,t.bubbleIds);setMessages(prev=>[...prev,...nextMessages]);}
-      const shown=t.shown;t.ack=t.ack.then(()=>confirmSeen({sessionId:t.sessionId,turnId:t.id,text:shown}));t.ack.catch(()=>{});
+      const update=chatDisplayUpdate(t,piece);setMessages(prev=>applyChatDisplay(prev,update));
+      const shown=t.shown;if(all||!t.buffer||t.lastAckAt==null||performance.now()-t.lastAckAt>=180){t.lastAckAt=performance.now();t.lastAckQueued=shown;t.ack=t.ack.then(()=>confirmSeen({sessionId:t.sessionId,turnId:t.id,text:shown}));t.ack.catch(()=>{});}
       if(t.firstShown==null)requestAnimationFrame(()=>requestAnimationFrame(()=>{if(t.firstShown==null)t.firstShown=Math.round(performance.now()-t.started);}));
     }while(all);
-    if(piece && !all)t.timer=setTimeout(()=>{t.timer=null;flushTurn(t);},messageDelay(piece));
+    if(t.buffer && !all)t.timer=setTimeout(()=>{t.timer=null;flushTurn(t);},28);
     else if(t.buffer && (t.done || takeMessage(t.buffer)[0]))t.timer=setTimeout(()=>{t.timer=null;flushTurn(t);},1000);
     if(t.done && !t.buffer)t.resolveDrain?.();
   }
@@ -237,7 +237,7 @@ function App() {
   }
   async function send(event,retry=null) {
     event?.preventDefault();const text=(retry?.text ?? draft).trim();if(!text || requestLock.current || reviewJobs.current.has(lifeId))return;
-    const messageId=retry?.id || crypto.randomUUID();requestLock.current=true;setBusy(true);setChatWaiting(true);setSavedNotice('');setError('');setTiming(null);
+    const messageId=retry?.id || crypto.randomUUID();requestLock.current=true;setBusy(true);setChatWaiting(true);setChatProgress('');setSavedNotice('');setError('');setTiming(null);
     setSessionMeta(m=>({...m,lastChatAt:new Date().toISOString(),startedAt:m.startedAt||new Date().toISOString()}));
     setFailureId('');const t={controller:new AbortController(),started:performance.now(),buffer:'',shown:'',bubbleIds:[],ack:Promise.resolve(),firstBody:null,firstShown:null,done:false,stopped:false,timer:null,id:null,messageId,sessionId:null,lifeId,memoryRevision:live.current?.memoryRevision||0};activeTurn.current=t;
     t.finished=new Promise(resolve=>t.resolveFinished=resolve);
@@ -251,23 +251,25 @@ function App() {
       if(t.stopped)throw new Error('已停止');
       t.failureStage='stream';await streamReply({sessionId:t.sessionId,message:text,intent,messageId,globalProfile:readGlobalMemory(draftStorage())},{signal:AbortSignal.any([t.controller.signal,AbortSignal.timeout(100000)]),onEvent:e=>{
         if(t.stopped)return;
+        if(e.type==='retry'||e.type==='status')setChatProgress(chatRetryText(e));
         if(e.type==='request')t.requestId=e.requestId;
         if(e.type==='start'){t.id=e.turnId;setCorrections(e.corrections);}
-        if(e.type==='text'){if(t.firstBody==null)t.firstBody=Math.round(performance.now()-t.started);t.buffer+=e.text;if(!t.timer)flushTurn(t);}
+        if(e.type==='text'){setChatProgress('');if(t.firstBody==null)t.firstBody=Math.round(performance.now()-t.started);t.buffer+=e.text;if(!t.timer)flushTurn(t);}
         if(e.type==='memory')t.memory=e.turnId===t.id?e:{sourceId:messageId,operations:[],status:'failed'};
-        if(e.type==='done'){t.requestId=e.requestId || t.requestId;t.networkDone=Math.round(performance.now()-t.started);t.done=true;clearTimeout(t.timer);t.timer=null;flushTurn(t,true);}
+        if(e.type==='done'){t.requestId=e.requestId || t.requestId;t.networkDone=Math.round(performance.now()-t.started);t.done=true;if(!t.timer)flushTurn(t);}
       }});
       await t.drain;t.failureStage=null;
       if(!t.stopped)setIntent('chat');
     }catch(e){if(!t.stopped){failure=e;setFailureId(e.requestId||t.requestId||'');t.buffer='';clearTimeout(t.timer);setError(e.message || '回复中断，输入和已显示内容已保留。');}}
     finally{
+      if(!t.stopped&&t.id&&t.shown&&t.lastAckQueued!==t.shown){const shown=t.shown;t.lastAckQueued=shown;t.ack=t.ack.then(()=>confirmSeen({sessionId:t.sessionId,turnId:t.id,text:shown}));t.ack.catch(()=>{});}
       let ackOkay=true;try{await t.ack;}catch{ackOkay=false;setSyncFailed(true);setError('文字已保留，请重新打开这条人生后继续。');}
 
       setMessages(prev=>prev.map(m=>m.id===messageId?{...m,status:t.stopped?'stopped':failure?'failed':'sent'}:m));
       clearTimeout(t.timer);
       const measures={firstBodyMs:t.firstBody,firstShownMs:t.firstShown,completeMs:t.networkDone ?? null,displayCompleteMs:Math.round(performance.now()-t.started),outcome:t.stopped?'stopped':failure?'failed':'success'};
       setTiming(measures);if(t.requestId)reportStoryTiming({requestId:t.requestId,...measures},measures.outcome,{task:'chat',failureStage:t.failureStage||null});
-      t.resolveFinished?.();activeTurn.current=null;requestLock.current=false;setBusy(false);setChatWaiting(false);experience.status().then(setStatus).catch(()=>{});
+      t.resolveFinished?.();activeTurn.current=null;requestLock.current=false;setBusy(false);setChatWaiting(false);setChatProgress('');experience.status().then(setStatus).catch(()=>{});
     }
   }
   const demo = (page === 'life' || page === 'chat') ? storyMode === 'demo' : status?.mode === 'demo';
@@ -298,7 +300,7 @@ function App() {
         {pendingStory()&&<div className="draft-actions"><button type="button" className="secondary" disabled={busy} onClick={e=>next(e,false,pendingStory())}>恢复生成结果</button><button type="button" className="text-button" disabled={busy} onClick={()=>experience.cancelStory().then(()=>setError("已取消，草稿仍保留。")).catch(e=>setError(e.message))}>取消原任务</button></div>}<div className="form-bottom"><div className="draft-actions"><span className="draft-status" role="status">{storageOkay===null?'正在保存…':storageOkay?'已保存':'暂时无法保存，请先备份文字'}</span><button type="button" className="text-button" disabled={busy} onClick={clearForm}>一键清空</button>{clearedDraft && <button type="button" className="text-button" disabled={busy} onClick={undoClear}>撤销清空</button>}</div><button className="primary" disabled={busy}>{editingProfile?'保存资料':busy?'正在写信…':generationFailed?'重试生成':status?.mode==='real'?'生成平行人生 ↗':'查看演示人生 ↗'}</button></div>{error && <div role="alert" className="error"><p>{error}</p>{fieldNotes.map(note=><button key={note.field} type="button" className="text-button" onClick={()=>reviewInputs([note])}>核对「{note.label}」</button>)}{failureId&&<label>请求ID（可选中复制）<input readOnly value={failureId} onFocus={e=>e.target.select()}/></label>}</div>}
       </form></section>}
       {page==='life'&&story&&<div className="life-layout"><div className="page-top"><button className="text-button" onClick={()=>navigate('input')}>修改背景信息</button><button className="text-button" onClick={()=>setStoryInfoOpen(true)}>查看故事背景</button></div>{notice}{reviewStory(story,generatedBackground,memories).issues.length>0&&<aside className="story-review"><p>有些时间或经历与背景不一致，原文仍为你保留。</p><button className="text-button" onClick={()=>navigate('input')}>核对背景并更新故事</button><small>更新会另存一个故事，原来的仍保留。</small></aside>}<StoryPaper key={lifeId} id={lifeId} play={freshStoryId===lifeId} onShown={()=>{const t=storyDisplayTiming.current;if(t?.lifeId===lifeId&&!t.shown){t.shown=true;const {lifeId:_,clientStarted,shown,...safe}=t;reportStoryTiming(safe,'shown',{displayCompleteMs:Math.round(performance.now()-clientStarted)});}}}><section className="life-heading"><p className="eyebrow">遇见另一个自己</p><h1 ref={heading} tabIndex={-1}>{storyText(story.title)}</h1><p>{rolePresentation(storyText(story.identity).replace('当时所在地或环境：',questionTime(generatedBackground).tense==='future'?'现实所在地：':'分叉前所在地：'),generatedBackground)} {storyMode === 'demo' && <span className="tag">示例人物</span>}</p><p className="description">{storyText(story.intro)}</p></section><section className="scenes">{story.scenes.map((scene,i) => <article className="scene" key={i}><time>{sceneTimeLabel(scene.time,generatedBackground)}</time><div><h2>{storyText(scene.title)}</h2>{storyParagraphs(scene.text).map((text,j)=><p key={j}>{text}</p>)}</div></article>)}</section></StoryPaper><div className="chat-invite"><div><h2>有些话，想和另一个自己聊聊。</h2><p>{storyMode === 'demo' ? '打开与示例人物的演示对话。' : '带着这段人生，开始一封新的回信。'}</p></div><button className="primary" onClick={() => navigate('chat')}>继续聊天 <span>↗</span></button></div><AboutMe title="故事背景" open={storyInfoOpen} onClose={()=>setStoryInfoOpen(false)}><aside className="background-card"><p className="small">{storyMode === 'demo' ? '以下是你的原文，未用于生成示例故事。' : ''}</p><dl><dt>故事开始于</dt><dd>{coordinates(generatedBackground).forkYear || '未知'}</dd><dt>{questionTime(generatedBackground).tense==='future'?'现实现在的所在地':'变化发生前的所在地'}</dt><dd>{coordinates(generatedBackground).locationAtFork || '未填写'}</dd>{[['mbti','MBTI（表达风格参考）'],['birthYear','出生年份'],['gender','性别'],['forkAge','分岔时年龄'],['realityOutcome','想回到的瞬间'],['hypotheticalDirection','这次探索的可能'],['lifeStatus','生活状态（'+(generatedBackground.lifeStatusScope==='now'?'现在':'当时')+'）'],['lifeSituation','生活补充（'+(generatedBackground.lifeSituationScope==='now'?'现在':'当时')+'）'],['relatedExperience','这件事之前的相关经历'],['choiceReason','当时选择的原因'],['details','故事约束'],['additionalInfo','自由补充']].map(([key, title]) => generatedBackground[key] && (key!=='gender'||['女','男','非二元'].includes(generatedBackground.gender)) && <React.Fragment key={key}><dt>{title}</dt><dd>{generatedBackground[key]}</dd></React.Fragment>)}</dl><button className="text-button" onClick={() => navigate('input')}>修改这些文字 ↗</button></aside><QuestionHistory background={generatedBackground}/><details className="era-notes"><summary>背景资料</summary><p className="small"></p>{eraContext.length ? eraContext.map(card=><article key={card.id}><h3>{card.title}</h3><p>{card.start} 至 {card.end} · {card.regions.join('、')} · {card.educationScope.join('、')}</p><ul>{card.facts.map(f=><li key={f}>{f}</li>)}</ul><p>{card.limits}</p><a href={card.url} target="_blank" rel="noreferrer">{card.sourceTitle}</a></article>):<p>这段故事以个人生活为主。</p>}</details></AboutMe></div>}
-      {page === 'chat' && story && <section className="chat-page"><div className="chat-title"><div className="avatar">我</div><div><h1 ref={heading} tabIndex={-1}>与另一个自己通信</h1><p>{chatIdentity(generatedBackground,story)}</p></div><nav className="chat-nav"><button type="button" className="text-button" onClick={()=>navigate('life')}>故事</button><button type="button" className="text-button" onClick={()=>setAboutOpen(true)}>关于我与记忆</button></nav></div>{notice}<div className="messages" onScroll={e=>{const el=e.currentTarget;followBottom.current=el.scrollHeight-el.scrollTop-el.clientHeight<70;chatPositions.current.set(lifeId,el.scrollTop);}} ref={messagesBox} role="log" aria-label="对话记录" aria-live="polite"><div className="message assistant first-letter"><span className="speaker-label">另一个自己</span><p>{chatText(qualifyCurrentAge(currentOpening(story,generatedBackground),generatedBackground))}</p></div>{messages.map((message, i) => <div className={`message ${message.role} ${historicMessages.current.has(message.id)?'':'am-new-message'}`} key={message.id||i}><span className="speaker-label">{message.role==='user'?'你':'另一个自己'}</span><p>{(message.role==='user'?message.text:chatText(message.text)).trim()}</p>{message.contextExcluded && <small>这条旧回复有误，已保留原文。</small>}{message.role==='user' && message.status==='failed' && <button className="text-button" disabled={busy} onClick={e=>send(e,message)}>重试这条消息</button>}</div>)}{chatWaiting && <p role="status">另一个自己正在输入…</p>}<div ref={chatEnd}/></div>
+      {page === 'chat' && story && <section className="chat-page"><div className="chat-title"><div className="avatar">我</div><div><h1 ref={heading} tabIndex={-1}>与另一个自己通信</h1><p>{chatIdentity(generatedBackground,story)}</p></div><nav className="chat-nav"><button type="button" className="text-button" onClick={()=>navigate('life')}>故事</button><button type="button" className="text-button" onClick={()=>setAboutOpen(true)}>关于我与记忆</button></nav></div>{notice}<div className="messages" onScroll={e=>{const el=e.currentTarget;followBottom.current=el.scrollHeight-el.scrollTop-el.clientHeight<70;chatPositions.current.set(lifeId,el.scrollTop);}} ref={messagesBox} role="log" aria-label="对话记录" aria-live="polite"><div className="message assistant first-letter"><span className="speaker-label">另一个自己</span><p>{chatText(qualifyCurrentAge(currentOpening(story,generatedBackground),generatedBackground))}</p></div>{messages.map((message, i) => <div className={`message ${message.role} ${historicMessages.current.has(message.id)?'':'am-new-message'}`} key={message.id||i}><span className="speaker-label">{message.role==='user'?'你':'另一个自己'}</span><p>{(message.role==='user'?message.text:chatText(message.text)).trim()}</p>{message.contextExcluded && <small>这条旧回复有误，已保留原文。</small>}{message.role==='user' && message.status==='failed' && <button className="text-button" disabled={busy} onClick={e=>send(e,message)}>重试这条消息</button>}</div>)}{chatWaiting && <p role="status">{chatProgress||'另一个自己正在输入…'}</p>}<div ref={chatEnd}/></div>
         {chatWaiting && <div className="stream-actions"><button type="button" className="text-button" onClick={showReceived}>立即显示全部（已收到的内容）</button><button type="button" className="text-button" onClick={stopReply}>停止本轮回复</button></div>}
 
         {savedNotice&&<p className="small" role="status">{savedNotice}</p>}<div className="closing-row"><button type="button" className="closing-button" onClick={()=>{leaveAction.current=()=>returnLives(true);endChat();}} disabled={profileWorking}>先聊到这里吧</button></div><form className="composer" onSubmit={send}><label className="sr-only" htmlFor="message">写给另一个自己</label><textarea ref={composer} id="message" onCompositionStart={()=>composing.current=true} onCompositionEnd={()=>composing.current=false} onKeyDown={e=>{

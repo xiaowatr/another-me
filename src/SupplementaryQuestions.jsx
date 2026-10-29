@@ -1,3 +1,4 @@
+import {shouldFinishQuestionGroup} from './question-round-policy.js';
 import {explicitClarificationPlan} from './explicit-clarification.js';
 import {conflictGuidance} from './input-guidance.js';
 import {reviewedQuestionOptions} from './question-options.js';
@@ -59,7 +60,7 @@ export default function SupplementaryQuestions({background,onChange,onClose,onGe
   if(missing.length){setQuestionIndex(ids.indexOf(missing[0]));setError('这一题还没填写。可以回答，也可以明确跳过。');return;}
   const s=finish();
   if(state.page<state.pages.length-1){store({...s,page:state.page+1});return;}
-  if(state.scenario||state.plan?.stop||state.shown.length>=8){store({...s,uiReady:true});return;}
+  if(shouldFinishQuestionGroup(state)){store({...s,uiReady:true,plan:{...s.plan,stop:true}});return;}
   await plan(s);
  }
  const unavailable=Boolean(state.plan?.optionalAnalysisUnavailable);

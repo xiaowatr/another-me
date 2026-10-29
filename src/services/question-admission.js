@@ -3,7 +3,7 @@ function pause(ms,signal){return new Promise((resolve,reject)=>{const stop=()=>{
 // Transport recovery reattaches the same owner/input cached task; model retries live on the server.
 export async function planWhenReady(request,background,signal,onWait=()=>{},options={}){
  const now=options.now||Date.now,sleep=options.sleep||pause,deadline=now()+(options.waitMs??45000);let waits=0;
- async function recover(path,body){for(let attempt=1;attempt<=3;attempt++){signal?.throwIfAborted();try{return await request(path,body,signal);}catch(e){signal?.throwIfAborted();if(attempt===3||!['network','timeout'].includes(e.category))throw e;onWait('正在重新接回补充问题，请稍等…');await sleep(attempt*1000,signal);}}}
+ async function recover(path,body){for(let attempt=1;attempt<=3;attempt++){signal?.throwIfAborted();try{return await request(path,body,signal);}catch(e){signal?.throwIfAborted();if(attempt===3||!['network','timeout'].includes(e.category))throw e;onWait('连接打了个小盹，正在重新接回刚才的问题…');await sleep(attempt*1000,signal);}}}
  let waiting=false;
  for(;;){signal?.throwIfAborted();
   if(!waiting){onWait('正在读你写下的这些…');try{return await recover('/api/questions',{background});}catch(e){if(e.category!=='busy'||!e.retryableBeforeModel)throw e;waiting=true;}}

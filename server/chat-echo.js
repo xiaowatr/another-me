@@ -55,15 +55,15 @@ function echoFallback(index){
  return index%2===0?'我在认真听。':'这件事我们可以慢慢说。';
 }
 
-export async function rewriteDirectEchoes(caller,{reply,currentMessage,history=[],signal,parentRequestId=null}){
+export async function rewriteDirectEchoes(caller,{reply,currentMessage,history=[],signal,parentRequestId=null,budget={calls:0,maxCalls:MAX_REWRITE_CALLS},onRewrite=()=>{}}){
  const userTexts=[currentMessage,...history.filter(x=>x?.role==='user').slice(-3).map(x=>x.content)];
  const parts=splitChatSentences(reply),matches=directEchoes(reply,userTexts);
  if(!matches.length)return {reply,rewrites:0,requestIds:[]};
  const requestIds=[];let rewriteCalls=0,fallbacks=0;
  for(const match of matches){
   const required=protectedRewriteAnchors(match.text);let replacement='',retryReason=null;
-  for(let attempt=1;attempt<=REWRITE_ATTEMPTS&&rewriteCalls<MAX_REWRITE_CALLS;attempt++){
-   rewriteCalls++;
+  for(let attempt=1;attempt<=REWRITE_ATTEMPTS&&rewriteCalls<MAX_REWRITE_CALLS&&budget.calls<budget.maxCalls;attempt++){
+   rewriteCalls++;budget.calls++;onRewrite({attempt,maximum:MAX_REWRITE_CALLS});
    let streamed='';
    const response=await caller.call('chat',chatEchoRewriteMessages({sentence:match.text,currentMessage,source:match.source,previous:parts[match.index-1],next:parts[match.index+1],retryReason}),{
     chatEnvelope:true,plainChatReply:true,requireStructuredChat:false,chatRewrite:'direct_echo',chatAttempt:attempt,parentRequestId,signal,
