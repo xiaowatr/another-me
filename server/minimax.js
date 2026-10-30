@@ -3,7 +3,7 @@ import {assertSafe,SAFETY_RULE} from './content-safety.js';
 import {transportError} from './transport-error.js';
 import {plainChatContent} from './chat-content.js';
 import {chatTools,chatToolStream} from './chat-tools.js';
-import {questionTools,receiveQuestionResult} from './question-contract.js';
+import {questionTools,questionJsonMessages,receiveQuestionResult} from './question-contract.js';
 import {chatEnvelope} from './chat-envelope.js';
 import {fillStoryMetadata} from './story-metadata.js';
 import {storyRequestInput} from './story-request.js';
@@ -50,15 +50,19 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       fs.appendFileSync(auditPath,JSON.stringify(record)+'\n');emit(record);
       const noThinking=task==='memory'||task==='questions'||task==='chat';
       record.thinking=noThinking?'disabled':task==='story'?(config.storyThinking||'disabled'):'unchanged';
+      record.requestedThinking=record.thinking; // Request intent, not proof that upstream honored it.
       record.maxCompletionTokens=options.chatRewrite?800:options.repairFields?(options.repairFields.some(f=>/^chapter[1-3]\.text$/.test(f))?3000:1200):task==='memory'?(config.memoryMaxTokens||2000):task==='story'?6000:3500;
       const transportTools=task==='story'?(options.repairFields?fieldRepairTools(options.repairFields,messages):storyTools(messages)):task==='questions'&&options.questionStage?questionTools(options.questionStage,{hasScenarioCandidate:options.questionHasScenario!==false}):null;
-      if(task==='questions')record.questionStage=options.questionStage||null;
+      const questionJson=task==='questions'&&Boolean(transportTools);
+      if(task==='questions'){record.questionStage=options.questionStage||null;if(questionJson)record.questionRequestedTransport='content_json';}
+      const wireMessages=questionJson?questionJsonMessages(messages,transportTools):messages;
+      const wireTools=questionJson?null:transportTools;
       if(options.repairFields)record.repairFields=options.repairFields;
       stage('transport');
       const response = await fetchImpl(`${config.base}/chat/completions`, {
         method: 'POST', redirect: 'error',
         headers: { 'Authorization': `Bearer ${config.key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, messages, ...(noThinking?{thinking:{type:'disabled'}}:task==='story'?{thinking:{type:config.storyThinking||'disabled'}}:{}), ...(transportTools?{tools:transportTools,tool_choice:transportTools.length===1?{type:'function',function:{name:transportTools[0].function.name}}:'required'}:options.chatEnvelope&&!options.plainChatReply?{tools:chatTools,tool_choice:{type:'function',function:{name:'submit_chat'}}}:{}), stream: Boolean(options.onText), ...(options.onText ? {stream_options:{include_usage:true}} : {}), reasoning_split: true, temperature: 1, max_completion_tokens: record.maxCompletionTokens }),
+        body: JSON.stringify({ model, messages:wireMessages, ...(noThinking?{thinking:{type:'disabled'}}:task==='story'?{thinking:{type:config.storyThinking||'disabled'}}:{}), ...(wireTools?{tools:wireTools,tool_choice:wireTools.length===1?{type:'function',function:{name:wireTools[0].function.name}}:'required'}:options.chatEnvelope&&!options.plainChatReply?{tools:chatTools,tool_choice:{type:'function',function:{name:'submit_chat'}}}:{}), stream: Boolean(options.onText), ...(options.onText ? {stream_options:{include_usage:true}} : {}), reasoning_split: true, temperature: 1, max_completion_tokens: record.maxCompletionTokens }),
         signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
       });
       record.httpStatus=response.status;
@@ -106,6 +110,7 @@ export function createCaller(config, { fetchImpl = fetch, directory = '.local', 
       stage('finish');
       const choice=body.choices?.[0], calls=choice?.message?.tool_calls;
       const structured=!!transportTools&&choice?.finish_reason==='tool_calls';
+      if(choice?.finish_reason==='length')record.outputLimitDetail=record.reportedReasoningTokens>0&&record.reportedAnswerTokens===0&&typeof choice.message?.content==='string'&&!choice.message.content.trim()&&!calls?.length?'reported_reasoning_only':'generation_limit';
       if (choice?.finish_reason !== 'stop'&&!structured) throw new AppError(choice?.finish_reason==='length'?'output_limit':'invalid_response', 502,{stage:'finish',reason:choice?.finish_reason==='length'?'output_limit':'not_completed'});
       // 不读取 reasoning_details / reasoning_content；不把原始响应或异常打印出来。
       stage('parse_and_schema');record.parsing={};

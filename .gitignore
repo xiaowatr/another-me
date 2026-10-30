@@ -120,3 +120,6 @@ evaluations/story_constraints/
 !tests/retry-status179.test.js
 
 !tests/self-decision180.test.js
+
+!tests/self-narrative181.test.js
+!tests/reasoning-diagnostics181.test.js

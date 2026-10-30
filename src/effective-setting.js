@@ -1,3 +1,4 @@
+import {explicitSelfNonAction} from './self-event.js';
 import {supplementaryContext} from './supplementary.js';
 import {timeAnchors,roleGender} from './input-anchors.js';
 import {criticalFacts} from './fact-frame.js';
@@ -12,14 +13,8 @@ export function compileSetting(input){
  const excluded=exclusive&&direction.match(/(?:^|[，。；])\s*([^，。；]{1,12}?)(?:没(?:有)?|未)([^，。；]+)/);
  const explicitPair=exclusive&&excluded&&exclusive[1].replace(/了/g,'').startsWith(excluded[2].split(/(?:[、，]|也|并且|并|且)(?:不|没|未)/)[0].replace(/了/g,''));
  const replacement=direction.match(/(?:改为|换成)我([^，。；]+)/),addition=/(?:我也|我同样|同时)/.test(direction);
- // A single explicit first-person non-event already identifies whose result is
- // changing. Optional dates are context, never another actor to exclude.
- const selfPrior=real.match(/^\s*(?:现实中[，,：:\s]*)?(?:(?:\d{4}年(?:\d{1,2}月(?:\d{1,2}[日号])?)?|那年|那时|当时|那次)[，,：:\s]*)?(我)(?:(?:那次|当时|那时)[，,\s]*)?((?:没(?:有)?|并未|未曾|未|不曾|不(?!是))[^，。；！？]+)[。；！？\s]*$/);
- // A first-person opportunity/plan followed by an explicit non-action can
- // span clauses. This only identifies the existing actor; it never invents
- // another person's exclusion or requires the final outcome to change.
- const selfDecisionPrior=real.match(/^\s*(?:现实中[，,：:\s]*)?(?:(?:\d{4}年(?:\d{1,2}月(?:\d{1,2}[日号])?)?|那年|那时|当时|那次)[，,：:\s]*)?(我)(?:原本|本来)(?:可以|打算|准备|想)[^，,。；！？“”「」"]+[，,](?:最后|最终|后来)(?:我)?(?:没有|没|未)[^，,。；！？“”「」"]+(?:[，,](?:还是|仍然|仍)(?:在|留在|做|住在|保持|维持)[^，,。；！？“”「」"]+)?[。；！？\s]*$/);
- const prior=selfPrior||(replacement?selfDecisionPrior:null)||real.match(/^(?:现实中)?(.{1,12}?)(?:那次|当时)([^，。；]+)/);
+ const selfPrior=explicitSelfNonAction(real);
+ const prior=selfPrior||real.match(/^(?:现实中)?(.{1,12}?)(?:那次|当时)([^，。；]+)/);
  let operation=explicitPair?'replace':replacement?'replace':addition?'add':/仅改变|只改变|只改/.test(direction)?'change':/^(?:保留|维持)/.test(direction)?'preserve':'unknown';
  const personal=supplementaryContext(b);
  const issues=[],clarificationIssues=[];if(replacement&&addition){issues.push('这次是替换原来的结果，还是两个人都经历这件事？');clarificationIssues.push({code:'conflicting_change_operation',fields:['hypotheticalDirection']});}

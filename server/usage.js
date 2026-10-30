@@ -7,6 +7,13 @@ export function captureUsage(record,usage){
  record.usageSource='provider';
  for(const [local,key] of [['inputTokens','prompt_tokens'],['outputTokens','completion_tokens'],['totalTokens','total_tokens']])if(number(usage[key])!==null)record[local]=usage[key];
  if(number(usage.prompt_tokens_details?.cached_tokens)!==null)record.cachedTokens=usage.prompt_tokens_details.cached_tokens;
+ const reasoning=number(usage.completion_tokens_details?.reasoning_tokens);
+ if(reasoning!==null){
+  record.reportedReasoningTokens=reasoning;
+  const output=number(record.outputTokens);
+  if(output!==null&&reasoning<=output)record.reportedAnswerTokens=output-reasoning;
+  record.thinkingControlStatus=record.thinking==='disabled'&&reasoning>0?'reported_reasoning_despite_disabled':reasoning===0?'reported_no_reasoning':'reported_reasoning';
+ }
  // Only numeric usage fields, never response content or arbitrary metadata.
  const safe={};for(const [key,value] of Object.entries(usage)){
   if(number(value)!==null)safe[key]=value;

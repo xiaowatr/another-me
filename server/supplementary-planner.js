@@ -21,7 +21,7 @@ import {supplementState,supplementSources,answerText,unknownAnswer,validateSuppl
 import {timeAnchors} from '../src/input-anchors.js';
 import {reviewedQuestionOptions} from '../src/question-options.js';
 import {AppError} from './core.js';
-export const PLANNER_VERSION='questions-v27';
+export const PLANNER_VERSION='questions-v28';
 export function plannerMessages(background){const state=supplementState(background),payload=questionInput(background);
  Object.assign(payload,{bank:modelQuestionBank(),scenarioBank:state.scenario?[]:SCENARIO_BANK,scenario:state.scenario?{id:state.scenario.id,question:SCENARIO_BY_ID[state.scenario.id]?.question,answer:state.scenario.answer,skipped:state.scenario.skipped}:null,recentScenarios:state.recentScenarios||[]});
  if(state.scenario?.answer?.trim()&&!state.scenario.skipped)payload.behaviorVocabulary=BEHAVIOR;
