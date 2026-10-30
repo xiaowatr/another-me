@@ -118,3 +118,5 @@ evaluations/story_constraints/
 !tests/chat-display179.test.js
 !tests/value-guidance179.test.js
 !tests/retry-status179.test.js
+
+!tests/self-decision180.test.js

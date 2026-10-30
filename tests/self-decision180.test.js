@@ -1,0 +1,16 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+const root=new URL('../',import.meta.url);
+const {compileSetting,generationSetting}=await import(new URL('src/effective-setting.js',root));
+const {generationInput}=await import(new URL('server/generation-input.js',root));
+const {createExperience}=await import(new URL('server/experience.js',root));
+const {storyMessages}=await import(new URL('server/prompts.js',root));
+const b={realityOutcome:'2026年4月，我原本可以申请转到更忙的项目组，最后没有申请，还是在原来的岗位。',hypotheticalDirection:'换成我认真找主管了解了新项目的安排，听完以后决定这次先不申请。想看看接下来的一个月。',choiceReason:'想留出生活时间，也认真完成工作。',details:'仍在原公司，这个月不转组。家人的具体情况不补充，用家人称呼。',relatedExperience:'一直在工作，没有创业经历。',birthYear:'1991',forkAge:'35',gender:'女',locationText:'城甲',mbti:'',lifeSituation:'',additionalInfo:''};
+test('B03 actual initial input identifies self without optional answers',()=>{const c=compileSetting(b);assert.deepEqual(c.clarificationIssues,[]);assert.ok(c.facts.every(f=>f.subject==='我'&&f.polarity));});
+test('skipping optional answers never changes the actor interpretation',()=>{for(const followupSkipped of ['', 'true'])assert.deepEqual(compileSetting({...b,followupSkipped,followupAnswer:''}).clarificationIssues,[]);});
+test('original choice, no-transfer condition and undisclosed family stay unchanged',()=>{const copy=structuredClone(b),c=compileSetting(b),g=generationSetting(c),input=generationInput(c);assert.deepEqual(b,copy);assert.equal(g.change,b.hypotheticalDirection);assert.ok(g.retained.some(x=>x.text.includes('这个月不转组')));assert.ok(input.sources.some(x=>x.id==='details'&&x.text===b.details));assert.deepEqual(g.roleGender,compileSetting(copy).roleGender);});
+test('clear own multi-clause decisions support ordinary alternative situations',()=>{for(const real of ['我本来打算报名，最后没有报名。','当时，我原本想去参加活动，最终没去，仍在原来的城市。','现实中，2025年2月，我原本可以换岗位，后来没有换，还是做原来的工作。'])assert.deepEqual(compileSetting({...b,realityOutcome:real}).clarificationIssues,[],real);});
+test('unknown, quoted, conditional, collective and other actors still require clarification',()=>{for(const real of ['那件事没发生。','如果我原本可以申请，最后没有申请。','他说我原本可以申请，最后没有申请。','我妈妈原本可以申请，最后没有申请。','我们原本可以申请，最后没有申请。','我没参加活动，朋友参加了。','我原本可以申请，最后朋友没有申请。','我原本可以申请，最后没有申请，朋友申请了。','我原本可以申请，最后没有申请，还是朋友申请了。'])assert.ok(compileSetting({...b,realityOutcome:real}).clarificationIssues.some(x=>x.code==='replacement_target_missing'),real);});
+test('replacement versus addition conflict remains blocked',()=>assert.ok(compileSetting({...b,hypotheticalDirection:'改为我参加，我也参加。'}).clarificationIssues.some(x=>x.code==='conflicting_change_operation')));
+test('B03 reaches story provider with both skip states through actual entry',async()=>{for(const clarificationSkipped of [true,false]){let calls=0;const app=createExperience({mode:'real',model:'offline'},{call:async()=>{calls++;throw Object.assign(new Error('offline-provider-reached'),{diagnostic:{retryable:false}});}});await assert.rejects(app.story({background:b,clarificationSkipped}),/offline-provider-reached/);assert.equal(calls,1);}});
+test('actual production story prompt carries bounded ordinal advice',()=>{const STORY_EXPRESSION=storyMessages(b).filter(m=>m.role==='system').map(m=>m.content).join('\n');assert.match(STORY_EXPRESSION,/下一次/);assert.match(STORY_EXPRESSION,/用户明确.*次数|明确.*总数/);assert.match(STORY_EXPRESSION,/同一.*时间|同一.*日期/);});
